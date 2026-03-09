@@ -299,6 +299,10 @@
           "named": true
         },
         {
+          "type": "datetime",
+          "named": true
+        },
+        {
           "type": "duration",
           "named": true
         },
@@ -529,6 +533,14 @@
         {
           "type": "keyword_changefeed",
           "named": true
+        },
+        {
+          "type": "keyword_include",
+          "named": true
+        },
+        {
+          "type": "keyword_original",
+          "named": true
         }
       ]
     }
@@ -695,11 +707,7 @@
           "named": true
         },
         {
-          "type": "object",
-          "named": true
-        },
-        {
-          "type": "variable_name",
+          "type": "value",
           "named": true
         }
       ]
@@ -1102,6 +1110,65 @@
         },
         {
           "type": "keyword_define",
+          "named": true
+        },
+        {
+          "type": "keyword_overwrite",
+          "named": true
+        },
+        {
+          "type": "permissions_expression_clause",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "define_config_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "api_middleware_clause",
+          "named": true
+        },
+        {
+          "type": "graphql_functions_clause",
+          "named": true
+        },
+        {
+          "type": "graphql_tables_clause",
+          "named": true
+        },
+        {
+          "type": "if_not_exists_clause",
+          "named": true
+        },
+        {
+          "type": "keyword_api",
+          "named": true
+        },
+        {
+          "type": "keyword_auto",
+          "named": true
+        },
+        {
+          "type": "keyword_config",
+          "named": true
+        },
+        {
+          "type": "keyword_define",
+          "named": true
+        },
+        {
+          "type": "keyword_graphql",
+          "named": true
+        },
+        {
+          "type": "keyword_none",
           "named": true
         },
         {
@@ -1669,6 +1736,10 @@
       "required": true,
       "types": [
         {
+          "type": "comment_clause",
+          "named": true
+        },
+        {
           "type": "duration_clause",
           "named": true
         },
@@ -1773,6 +1844,40 @@
         },
         {
           "type": "where_clause",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "destructure",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "destructure_field",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "destructure_field",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "keyword_as",
           "named": true
         }
       ]
@@ -2148,6 +2253,10 @@
           "named": true
         },
         {
+          "type": "path",
+          "named": true
+        },
+        {
           "type": "value",
           "named": true
         }
@@ -2470,6 +2579,72 @@
         },
         {
           "type": "keyword_field",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "graphql_functions_clause",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "custom_function_name",
+          "named": true
+        },
+        {
+          "type": "keyword_auto",
+          "named": true
+        },
+        {
+          "type": "keyword_exclude",
+          "named": true
+        },
+        {
+          "type": "keyword_functions",
+          "named": true
+        },
+        {
+          "type": "keyword_include",
+          "named": true
+        },
+        {
+          "type": "keyword_none",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "graphql_tables_clause",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "keyword_auto",
+          "named": true
+        },
+        {
+          "type": "keyword_include",
+          "named": true
+        },
+        {
+          "type": "keyword_none",
+          "named": true
+        },
+        {
+          "type": "keyword_tables",
           "named": true
         }
       ]
@@ -3553,6 +3728,10 @@
       "multiple": false,
       "required": true,
       "types": [
+        {
+          "type": "destructure",
+          "named": true
+        },
         {
           "type": "filter",
           "named": true
@@ -4689,6 +4868,10 @@
           "named": true
         },
         {
+          "type": "define_config_statement",
+          "named": true
+        },
+        {
           "type": "define_database_statement",
           "named": true
         },
@@ -5805,6 +5988,10 @@
     "named": true
   },
   {
+    "type": "datetime",
+    "named": true
+  },
+  {
     "type": "decimal",
     "named": true
   },
@@ -5893,6 +6080,10 @@
     "named": true
   },
   {
+    "type": "keyword_auto",
+    "named": true
+  },
+  {
     "type": "keyword_backend",
     "named": true
   },
@@ -5966,6 +6157,10 @@
   },
   {
     "type": "keyword_computed",
+    "named": true
+  },
+  {
+    "type": "keyword_config",
     "named": true
   },
   {
@@ -6113,6 +6308,10 @@
     "named": true
   },
   {
+    "type": "keyword_exclude",
+    "named": true
+  },
+  {
     "type": "keyword_exists",
     "named": true
   },
@@ -6161,11 +6360,19 @@
     "named": true
   },
   {
+    "type": "keyword_functions",
+    "named": true
+  },
+  {
     "type": "keyword_future",
     "named": true
   },
   {
     "type": "keyword_grant",
+    "named": true
+  },
+  {
+    "type": "keyword_graphql",
     "named": true
   },
   {
@@ -6206,6 +6413,10 @@
   },
   {
     "type": "keyword_in",
+    "named": true
+  },
+  {
+    "type": "keyword_include",
     "named": true
   },
   {
@@ -6370,6 +6581,10 @@
   },
   {
     "type": "keyword_order",
+    "named": true
+  },
+  {
+    "type": "keyword_original",
     "named": true
   },
   {
@@ -6562,6 +6777,10 @@
   },
   {
     "type": "keyword_table",
+    "named": true
+  },
+  {
+    "type": "keyword_tables",
     "named": true
   },
   {

@@ -341,7 +341,7 @@ CREATE user:john SET name = 'John' VERSION d'2025-08-19T08:00:00Z';
             (keyword_version)
             (value
               (base_value
-                (prefixed_string)))))))
+                (datetime)))))))
     (semi_colon)))
 
 ==================
@@ -706,7 +706,7 @@ SELECT * FROM person ORDER BY name TEMPFILES VERSION d'2025-08-19T08:00:00Z';
               (keyword_version)
               (value
                 (base_value
-                  (prefixed_string))))))))
+                  (datetime))))))))
     (semi_colon)
     (expression
       (subquery_statement
@@ -732,5 +732,5 @@ SELECT * FROM person ORDER BY name TEMPFILES VERSION d'2025-08-19T08:00:00Z';
               (keyword_version)
               (value
                 (base_value
-                  (prefixed_string))))))))
+                  (datetime))))))))
     (semi_colon)))

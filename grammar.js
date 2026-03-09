@@ -9,6 +9,7 @@ export default grammar({
 		[$.number, $.record_id_value],
 		[$.record_id_value, $.range],
 		[$.record_id_value, $.record_id_func],
+		[$.identifier, $.record_id_escaped],
 	],
 
 	rules: {
@@ -241,6 +242,14 @@ export default grammar({
 		keyword_start: (_) => make_keyword('START'),
 		keyword_future: (_) => make_keyword('FUTURE'),
 		keyword_matches: (_) => make_keyword('MATCHES'),
+		keyword_config: (_) => make_keyword('CONFIG'),
+		keyword_tables: (_) => make_keyword('TABLES'),
+		keyword_functions: (_) => make_keyword('FUNCTIONS'),
+		keyword_include: (_) => make_keyword('INCLUDE'),
+		keyword_exclude: (_) => make_keyword('EXCLUDE'),
+		keyword_auto: (_) => make_keyword('AUTO'),
+		keyword_original: (_) => make_keyword('ORIGINAL'),
+		keyword_sequence: (_) => make_keyword('SEQUENCE'),
 
 		// Expressions
 		expressions: ($) =>
@@ -305,6 +314,7 @@ export default grammar({
 				$.define_table_statement,
 				$.define_token_statement,
 				$.define_user_statement,
+				$.define_config_statement,
 				$.rebuild_index_statement,
 			),
 
@@ -620,6 +630,47 @@ export default grammar({
 				optional($.comment_clause),
 			),
 
+		define_config_statement: ($) =>
+			seq(
+				$.keyword_define,
+				$.keyword_config,
+				optional(choice($.if_not_exists_clause, $.keyword_overwrite)),
+				choice(
+					seq(
+						$.keyword_api,
+						optional($.api_middleware_clause),
+						optional($.permissions_expression_clause),
+					),
+					seq(
+						$.keyword_graphql,
+						optional(choice($.keyword_auto, $.keyword_none)),
+						optional($.graphql_tables_clause),
+						optional($.graphql_functions_clause),
+					),
+				),
+			),
+
+		graphql_tables_clause: ($) =>
+			seq(
+				$.keyword_tables,
+				choice(
+					$.keyword_auto,
+					$.keyword_none,
+					seq($.keyword_include, commaSeparated($.identifier)),
+				),
+			),
+
+		graphql_functions_clause: ($) =>
+			seq(
+				$.keyword_functions,
+				choice(
+					$.keyword_auto,
+					$.keyword_none,
+					seq($.keyword_include, '[', commaSeparated($.custom_function_name), ']'),
+					seq($.keyword_exclude, '[', commaSeparated($.custom_function_name), ']'),
+				),
+			),
+
 		access_record_jwt_clause: ($) =>
 			prec.left(
 				seq(
@@ -687,13 +738,16 @@ export default grammar({
 				$.identifier,
 				$.keyword_on,
 				choice($.keyword_root, $.keyword_namespace, $.keyword_database),
-				choice(
+				optional(choice(
 					seq($.keyword_password, $.string),
 					seq($.keyword_password_hash, $.string),
-				),
-				$.keyword_roles,
-				choice($.keyword_owner, $.keyword_editor, $.keyword_viewer),
+				)),
+				optional(seq(
+					$.keyword_roles,
+					choice($.keyword_owner, $.keyword_editor, $.keyword_viewer),
+				)),
 				optional($.duration_clause),
+				optional($.comment_clause),
 			),
 
 		rebuild_index_statement: ($) =>
@@ -1339,7 +1393,12 @@ export default grammar({
 				optional($.group_clause),
 			),
 
-		changefeed_clause: ($) => seq($.keyword_changefeed, $.duration),
+		changefeed_clause: ($) =>
+			seq(
+				$.keyword_changefeed,
+				$.duration,
+				optional(seq($.keyword_include, $.keyword_original)),
+			),
 
 		token_type_clause: ($) =>
 			seq(
@@ -1369,7 +1428,7 @@ export default grammar({
 		create_target: ($) => choice(commaSeparated($.value), $.multi_record),
 
 		content_clause: ($) =>
-			seq($.keyword_content, choice($.object, $.variable_name)),
+			seq($.keyword_content, $.value),
 
 		set_clause: ($) =>
 			seq($.keyword_set, commaSeparated($.field_assignment)),
@@ -1407,7 +1466,11 @@ export default grammar({
 		replace_clause: ($) => seq($.keyword_replace, $.object),
 
 		field_assignment: ($) =>
-			seq($.identifier, $.assignment_operator, $.value),
+			seq(
+				choice($.path, $.identifier),
+				$.assignment_operator,
+				$.value,
+			),
 
 		// Value-related rules
 		value: ($) =>
@@ -1444,6 +1507,7 @@ export default grammar({
 			choice(
 				$.string,
 				$.prefixed_string,
+				$.datetime,
 				$.number,
 				$.keyword_true,
 				$.keyword_false,
@@ -1502,7 +1566,13 @@ export default grammar({
 				seq($.graph_path, repeat($.path_element)),
 			),
 
-		path_element: ($) => choice($.graph_path, $.subscript, $.filter),
+		path_element: ($) => choice($.graph_path, $.subscript, $.filter, $.destructure),
+
+		destructure: ($) =>
+			seq('.', '{', commaSeparated($.destructure_field), '}'),
+
+		destructure_field: ($) =>
+			seq($.identifier, optional(seq($.keyword_as, $.identifier))),
 
 		graph_path: ($) =>
 			seq(
@@ -1620,6 +1690,8 @@ export default grammar({
 
 		// Lexical tokens
 		string: (_) => /'[^'\\]*(?:\\.[^'\\]*)*'|"[^"\\]*(?:\\.[^"\\]*)*"/,
+		datetime: (_) =>
+			token(prec(1, /d(?:'[^'\\]*(?:\\.[^'\\]*)*'|"[^"\\]*(?:\\.[^"\\]*)*")/)),
 		prefixed_string: (_) =>
 			/[fruds](?:'[^'\\]*(?:\\.[^'\\]*)*'|"[^"\\]*(?:\\.[^"\\]*)*")/,
 		number: ($) => choice($.int, $.float, $.decimal),
@@ -1627,7 +1699,12 @@ export default grammar({
 		float: (_) => /-?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?f?/,
 		decimal: (_) => /-?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?dec/,
 		variable_name: (_) => /\$[a-zA-Z_][a-zA-Z0-9_]*/,
-		identifier: (_) => /[a-zA-Z_][a-zA-Z0-9_]*/,
+		identifier: (_) =>
+			choice(
+				/[a-zA-Z_][a-zA-Z0-9_]*/,
+				/`[^`]*`/,
+				/⟨[^⟩]*⟩/,
+			),
 		custom_function_name: (_) => /fn(::[a-zA-Z_][a-zA-Z0-9_]*)*/,
 		builtin_function_name: (_) =>
 			token(

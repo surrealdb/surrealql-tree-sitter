@@ -1,6 +1,7 @@
 {
   "$schema": "https://tree-sitter.github.io/tree-sitter/assets/schemas/grammar.schema.json",
   "name": "surrealql",
+  "word": "_word",
   "rules": {
     "source_file": {
       "type": "CHOICE",
@@ -9199,8 +9200,8 @@
       ]
     },
     "type_name": {
-      "type": "PATTERN",
-      "value": "[a-zA-Z_][a-zA-Z0-9_]*"
+      "type": "SYMBOL",
+      "name": "_word"
     },
     "literal_value": {
       "type": "CHOICE",
@@ -9729,12 +9730,16 @@
       "type": "PATTERN",
       "value": "\\$[a-zA-Z_][a-zA-Z0-9_]*"
     },
+    "_word": {
+      "type": "PATTERN",
+      "value": "[a-zA-Z_][a-zA-Z0-9_]*"
+    },
     "identifier": {
       "type": "CHOICE",
       "members": [
         {
-          "type": "PATTERN",
-          "value": "[a-zA-Z_][a-zA-Z0-9_]*"
+          "type": "SYMBOL",
+          "name": "_word"
         },
         {
           "type": "PATTERN",
@@ -9916,8 +9921,8 @@
       ]
     },
     "object_key": {
-      "type": "PATTERN",
-      "value": "[a-zA-Z_][a-zA-Z0-9_]*"
+      "type": "SYMBOL",
+      "name": "_word"
     },
     "record_id": {
       "type": "PREC_LEFT",
@@ -10194,7 +10199,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "decimal"
+          "name": "float"
         },
         {
           "type": "STRING",
@@ -10202,7 +10207,7 @@
         },
         {
           "type": "SYMBOL",
-          "name": "decimal"
+          "name": "float"
         },
         {
           "type": "STRING",

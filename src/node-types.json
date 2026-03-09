@@ -3861,7 +3861,7 @@
       "required": true,
       "types": [
         {
-          "type": "decimal",
+          "type": "float",
           "named": true
         }
       ]

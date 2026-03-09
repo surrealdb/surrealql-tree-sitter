@@ -3,6 +3,8 @@ export default grammar({
 
 	extras: ($) => [$.comment, /\s\n/, /\s/],
 
+	word: ($) => $._word,
+
 	conflicts: ($) => [
 		[$.block, $.object],
 		[$.base_value, $.record_id_value],
@@ -1621,7 +1623,7 @@ export default grammar({
 				')',
 			),
 
-		type_name: (_) => /[a-zA-Z_][a-zA-Z0-9_]*/,
+		type_name: ($) => $._word,
 
 		literal_value: ($) => choice($.int, $.string, $.duration),
 
@@ -1699,9 +1701,10 @@ export default grammar({
 		float: (_) => /-?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?f?/,
 		decimal: (_) => /-?[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?dec/,
 		variable_name: (_) => /\$[a-zA-Z_][a-zA-Z0-9_]*/,
-		identifier: (_) =>
+		_word: (_) => /[a-zA-Z_][a-zA-Z0-9_]*/,
+		identifier: ($) =>
 			choice(
-				/[a-zA-Z_][a-zA-Z0-9_]*/,
+				$._word,
 				/`[^`]*`/,
 				/⟨[^⟩]*⟩/,
 			),
@@ -1723,7 +1726,7 @@ export default grammar({
 		object_content: ($) => commaSeparatedTrailing($.object_property),
 		object_property: ($) =>
 			seq(choice($.object_key, $.string), ':', $.value),
-		object_key: (_) => /[a-zA-Z_][a-zA-Z0-9_]*/,
+		object_key: ($) => $._word,
 
 		record_id: ($) =>
 			prec.left(
@@ -1765,7 +1768,7 @@ export default grammar({
 		sub_query: ($) => seq('(', $.expression, ')'),
 		duration: ($) => repeat1($.duration_part),
 		duration_part: (_) => /[0-9]+\s*(ns|us|µs|ms|s|m|h|d|w|y)/,
-		point: ($) => seq('(', $.decimal, ',', $.decimal, ')'),
+		point: ($) => seq('(', $.float, ',', $.float, ')'),
 		range: ($) => seq($.int, '..', optional('='), $.int),
 
 		operator: ($) =>

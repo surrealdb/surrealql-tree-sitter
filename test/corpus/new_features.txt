@@ -294,7 +294,7 @@ SHOW CHANGES FOR DATABASE SINCE d'2024-01-01T00:00:00Z';
           (keyword_since)
           (value
             (base_value
-              (prefixed_string))))))
+              (datetime))))))
     (semi_colon)))
 
 ==================

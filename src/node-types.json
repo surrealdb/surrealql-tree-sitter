@@ -214,6 +214,10 @@
       "required": false,
       "types": [
         {
+          "type": "closure",
+          "named": true
+        },
+        {
           "type": "value",
           "named": true
         }
@@ -524,6 +528,83 @@
         },
         {
           "type": "keyword_changefeed",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "closure",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "block",
+          "named": true
+        },
+        {
+          "type": "closure_body",
+          "named": true
+        },
+        {
+          "type": "closure_param",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "closure_body",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "base_value",
+          "named": true
+        },
+        {
+          "type": "cast_expression",
+          "named": true
+        },
+        {
+          "type": "closure_body",
+          "named": true
+        },
+        {
+          "type": "function_call",
+          "named": true
+        },
+        {
+          "type": "operator",
+          "named": true
+        },
+        {
+          "type": "path",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "closure_param",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "type",
+          "named": true
+        },
+        {
+          "type": "variable_name",
           "named": true
         }
       ]
@@ -2040,11 +2121,11 @@
       "required": true,
       "types": [
         {
-          "type": "identifier",
+          "type": "keyword_fetch",
           "named": true
         },
         {
-          "type": "keyword_fetch",
+          "type": "value",
           "named": true
         }
       ]
@@ -2214,6 +2295,10 @@
           "named": true
         },
         {
+          "type": "start_clause",
+          "named": true
+        },
+        {
           "type": "tempfiles_clause",
           "named": true
         },
@@ -2303,6 +2388,25 @@
     }
   },
   {
+    "type": "future_value",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "block",
+          "named": true
+        },
+        {
+          "type": "keyword_future",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "graph_path",
     "named": true,
     "fields": {},
@@ -2380,15 +2484,15 @@
       "required": true,
       "types": [
         {
-          "type": "identifier",
-          "named": true
-        },
-        {
           "type": "keyword_by",
           "named": true
         },
         {
           "type": "keyword_group",
+          "named": true
+        },
+        {
+          "type": "value",
           "named": true
         }
       ]
@@ -2668,6 +2772,10 @@
           "named": true
         },
         {
+          "type": "keyword_relation",
+          "named": true
+        },
+        {
           "type": "keyword_values",
           "named": true
         },
@@ -2709,6 +2817,10 @@
       "multiple": true,
       "required": true,
       "types": [
+        {
+          "type": "closure",
+          "named": true
+        },
         {
           "type": "keyword_let",
           "named": true
@@ -2760,11 +2872,15 @@
       "required": true,
       "types": [
         {
+          "type": "keyword_by",
+          "named": true
+        },
+        {
           "type": "keyword_limit",
           "named": true
         },
         {
-          "type": "number",
+          "type": "value",
           "named": true
         }
       ]
@@ -3223,6 +3339,10 @@
           "named": true
         },
         {
+          "type": "keyword_matches",
+          "named": true
+        },
+        {
           "type": "keyword_none_inside",
           "named": true
         },
@@ -3240,6 +3360,25 @@
         },
         {
           "type": "keyword_outside",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "option_statement",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "identifier",
+          "named": true
+        },
+        {
+          "type": "keyword_option",
           "named": true
         }
       ]
@@ -3651,6 +3790,10 @@
           "named": true
         },
         {
+          "type": "option_statement",
+          "named": true
+        },
+        {
           "type": "sleep_statement",
           "named": true
         },
@@ -3750,6 +3893,30 @@
     }
   },
   {
+    "type": "record_id_escaped",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "record_id_func",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "argument_list",
+          "named": true
+        },
+        {
+          "type": "record_id_ident",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "record_id_range",
     "named": true,
     "fields": {},
@@ -3782,6 +3949,14 @@
         },
         {
           "type": "object",
+          "named": true
+        },
+        {
+          "type": "record_id_escaped",
+          "named": true
+        },
+        {
+          "type": "record_id_func",
           "named": true
         },
         {
@@ -3963,6 +4138,10 @@
           "named": true
         },
         {
+          "type": "keyword_access",
+          "named": true
+        },
+        {
           "type": "keyword_analyzer",
           "named": true
         },
@@ -3992,6 +4171,10 @@
         },
         {
           "type": "keyword_index",
+          "named": true
+        },
+        {
+          "type": "keyword_module",
           "named": true
         },
         {
@@ -4297,6 +4480,10 @@
           "named": true
         },
         {
+          "type": "keyword_database",
+          "named": true
+        },
+        {
           "type": "keyword_for",
           "named": true
         },
@@ -4417,15 +4604,38 @@
       "required": true,
       "types": [
         {
-          "type": "identifier",
-          "named": true
-        },
-        {
           "type": "keyword_at",
           "named": true
         },
         {
           "type": "keyword_split",
+          "named": true
+        },
+        {
+          "type": "value",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "start_clause",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "keyword_at",
+          "named": true
+        },
+        {
+          "type": "keyword_start",
+          "named": true
+        },
+        {
+          "type": "value",
           "named": true
         }
       ]
@@ -5000,6 +5210,10 @@
           "named": true
         },
         {
+          "type": "parameterized_type",
+          "named": true
+        },
+        {
           "type": "type_name",
           "named": true
         }
@@ -5249,6 +5463,10 @@
           "named": true
         },
         {
+          "type": "future_value",
+          "named": true
+        },
+        {
           "type": "negated_expression",
           "named": true
         },
@@ -5258,6 +5476,10 @@
         },
         {
           "type": "range",
+          "named": true
+        },
+        {
+          "type": "regex",
           "named": true
         }
       ]
@@ -5939,6 +6161,10 @@
     "named": true
   },
   {
+    "type": "keyword_future",
+    "named": true
+  },
+  {
     "type": "keyword_grant",
     "named": true
   },
@@ -6055,6 +6281,10 @@
     "named": true
   },
   {
+    "type": "keyword_matches",
+    "named": true
+  },
+  {
     "type": "keyword_merge",
     "named": true
   },
@@ -6128,6 +6358,10 @@
   },
   {
     "type": "keyword_only",
+    "named": true
+  },
+  {
+    "type": "keyword_option",
     "named": true
   },
   {
@@ -6323,6 +6557,10 @@
     "named": true
   },
   {
+    "type": "keyword_start",
+    "named": true
+  },
+  {
     "type": "keyword_table",
     "named": true
   },
@@ -6448,6 +6686,10 @@
   },
   {
     "type": "record_id_ident",
+    "named": true
+  },
+  {
+    "type": "regex",
     "named": true
   },
   {

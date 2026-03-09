@@ -8,6 +8,7 @@ export default grammar({
 		[$.base_value, $.record_id_value],
 		[$.number, $.record_id_value],
 		[$.record_id_value, $.range],
+		[$.record_id_value, $.record_id_func],
 	],
 
 	rules: {
@@ -18,7 +19,7 @@ export default grammar({
 			token(
 				choice(
 					seq('--', /.*/),
-					seq('/*', /.*/, repeat(seq('\n', /.*/)), '*/'),
+					seq('/*', /[^*]*\*+([^/*][^*]*\*+)*/, '/'),
 					seq('#', /.*/),
 					seq('//', /.*/),
 					seq('-------- Query', /.*/),
@@ -235,6 +236,11 @@ export default grammar({
 		keyword_computed: (_) => make_keyword('COMPUTED'),
 		keyword_bucket: (_) => make_keyword('BUCKET'),
 		keyword_graphql: (_) => make_keyword('GRAPHQL'),
+		keyword_option: (_) => make_keyword('OPTION'),
+		keyword_import: (_) => make_keyword('IMPORT'),
+		keyword_start: (_) => make_keyword('START'),
+		keyword_future: (_) => make_keyword('FUTURE'),
+		keyword_matches: (_) => make_keyword('MATCHES'),
 
 		// Expressions
 		expressions: ($) =>
@@ -263,6 +269,7 @@ export default grammar({
 				$.continue_statement,
 				$.sleep_statement,
 				$.kill_statement,
+				$.option_statement,
 			),
 
 		// Statements that can be stand alone or nested
@@ -302,6 +309,9 @@ export default grammar({
 			),
 
 		kill_statement: ($) => seq($.keyword_kill, $.value),
+
+		option_statement: ($) =>
+			seq($.keyword_option, $.identifier),
 
 		sleep_statement: ($) => seq($.keyword_sleep, $.duration),
 
@@ -360,7 +370,7 @@ export default grammar({
 				$.keyword_let,
 				$.variable_name,
 				'=',
-				choice($.value, $.subquery_statement),
+				choice($.closure, $.value, $.subquery_statement),
 			),
 
 		info_statement: ($) =>
@@ -783,6 +793,22 @@ export default grammar({
 						optional($.if_exists_clause),
 						$.identifier,
 					),
+					seq(
+						$.keyword_access,
+						optional($.if_exists_clause),
+						$.identifier,
+						$.keyword_on,
+						choice(
+							$.keyword_root,
+							$.keyword_namespace,
+							$.keyword_database,
+						),
+					),
+					seq(
+						$.keyword_module,
+						optional($.if_exists_clause),
+						$.identifier,
+					),
 				),
 			),
 
@@ -879,8 +905,10 @@ export default grammar({
 				$.keyword_show,
 				$.keyword_changes,
 				$.keyword_for,
-				$.keyword_table,
-				$.identifier,
+				choice(
+					seq($.keyword_table, $.identifier),
+					$.keyword_database,
+				),
 				$.keyword_since,
 				$.value,
 				optional($.limit_clause),
@@ -890,6 +918,7 @@ export default grammar({
 			seq(
 				$.keyword_insert,
 				optional($.keyword_ignore),
+				optional($.keyword_relation),
 				$.keyword_into,
 				$.identifier,
 				choice(
@@ -901,8 +930,12 @@ export default grammar({
 						')',
 						$.keyword_values,
 						commaSeparated(seq('(', commaSeparated($.value), ')')),
-						$.keyword_on_duplicate_key_update,
-						commaSeparated($.field_assignment),
+						optional(
+							seq(
+								$.keyword_on_duplicate_key_update,
+								commaSeparated($.field_assignment),
+							),
+						),
 					),
 				),
 			),
@@ -985,6 +1018,7 @@ export default grammar({
 						optional($.tempfiles_clause),
 						optional($.version_clause),
 						optional($.limit_clause),
+						optional($.start_clause),
 						optional($.fetch_clause),
 						optional($.timeout_clause),
 						optional($.parallel_clause),
@@ -1010,14 +1044,14 @@ export default grammar({
 			seq(
 				$.keyword_split,
 				optional($.keyword_at),
-				commaSeparated($.identifier),
+				commaSeparated($.value),
 			),
 
 		group_clause: ($) =>
 			seq(
 				$.keyword_group,
 				optional($.keyword_by),
-				commaSeparated($.identifier),
+				commaSeparated($.value),
 			),
 
 		order_clause: ($) =>
@@ -1040,8 +1074,9 @@ export default grammar({
 				optional(choice($.keyword_asc, $.keyword_desc)),
 			),
 
-		limit_clause: ($) => seq($.keyword_limit, $.number),
-		fetch_clause: ($) => seq($.keyword_fetch, commaSeparated($.identifier)),
+		limit_clause: ($) => seq($.keyword_limit, optional($.keyword_by), $.value),
+		start_clause: ($) => seq($.keyword_start, optional($.keyword_at), $.value),
+		fetch_clause: ($) => seq($.keyword_fetch, commaSeparated($.value)),
 		tempfiles_clause: ($) => $.keyword_tempfiles,
 		version_clause: ($) => seq($.keyword_version, $.value),
 		timeout_clause: ($) => seq($.keyword_timeout, $.duration),
@@ -1384,6 +1419,8 @@ export default grammar({
 				$.function_call,
 				$.negated_expression,
 				$.range,
+				$.future_value,
+				$.regex,
 			),
 
 		multi_record: ($) => seq('|', $.identifier, ':', $.int, '|'),
@@ -1424,13 +1461,39 @@ export default grammar({
 
 		cast_expression: ($) => prec.left(seq('<', $.type_name, '>', $.value)),
 
-		binary_expression: ($) => prec.left(seq($.value, $.operator, $.value)),
+		binary_expression: ($) => prec.left(1, seq($.value, $.operator, $.value)),
 
 		negated_expression: ($) =>
 			seq(
 				'!',
 				choice($.variable_name, $.function_call, $.record_id, $.path),
 			),
+
+
+		closure: ($) =>
+			prec.right(3, seq(
+				'|',
+				optional(commaSeparated($.closure_param)),
+				'|',
+				choice($.block, $.closure_body),
+			)),
+
+		closure_body: ($) =>
+			choice(
+				prec.left(2, seq($.closure_body, $.operator, $.closure_body)),
+				$.cast_expression,
+				$.path,
+				$.function_call,
+				$.base_value,
+			),
+
+		closure_param: ($) =>
+			seq($.variable_name, optional(seq(':', $.type))),
+
+		future_value: ($) =>
+			seq('<', $.keyword_future, '>', $.block),
+
+		regex: (_) => /\/[^\/\\\n]*(?:\\.[^\/\\\n]*)*\//,
 
 		path: ($) =>
 			choice(
@@ -1479,7 +1542,7 @@ export default grammar({
 
 		version: ($) => seq('<', $.version_number, '>'),
 
-		argument_list: ($) => seq('(', optional(commaSeparated($.value)), ')'),
+		argument_list: ($) => seq('(', optional(commaSeparated(choice($.closure, $.value))), ')'),
 
 		argument_list_count: ($) =>
 			seq(
@@ -1510,8 +1573,8 @@ export default grammar({
 			prec.right(
 				1,
 				seq(
-					choice($.type_name, $.literal_value),
-					repeat1(seq('|', choice($.type_name, $.literal_value))),
+					choice($.parameterized_type, $.type_name, $.literal_value),
+					repeat1(seq('|', choice($.parameterized_type, $.type_name, $.literal_value))),
 				),
 			),
 
@@ -1594,8 +1657,15 @@ export default grammar({
 				),
 			),
 		record_id_value: ($) =>
-			choice($.record_id_ident, $.int, $.array, $.object),
+			choice($.record_id_ident, $.int, $.array, $.object, $.record_id_func, $.record_id_escaped),
 		record_id_ident: (_) => /[a-zA-Z0-9_]+/,
+		record_id_func: ($) =>
+			seq($.record_id_ident, $.argument_list),
+		record_id_escaped: (_) =>
+			choice(
+				/`[^`]*`/,
+				/⟨[^⟩]*⟩/,
+			),
 		record_id_range: ($) =>
 			prec.right(
 				3,
@@ -1647,6 +1717,7 @@ export default grammar({
 				$.keyword_none_inside,
 				$.keyword_outside,
 				$.keyword_intersects,
+				$.keyword_matches,
 				seq('@', $.int, '@'),
 				seq('<|', $.int, optional(seq(',', $.distance_values)), '|>'),
 			),

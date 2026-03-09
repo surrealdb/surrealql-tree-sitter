@@ -6695,7 +6695,7 @@
                 },
                 {
                   "type": "SYMBOL",
-                  "name": "number"
+                  "name": "distance_values"
                 }
               ]
             },

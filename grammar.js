@@ -1220,7 +1220,7 @@ export default grammar({
 				$.keyword_dimension,
 				$.number,
 				optional(seq($.keyword_type, $.type)),
-				optional(seq($.keyword_dist, $.number)),
+				optional(seq($.keyword_dist, $.distance_values)),
 				optional(seq($.keyword_efc, $.number)),
 				optional(seq($.keyword_m, $.number)),
 			),

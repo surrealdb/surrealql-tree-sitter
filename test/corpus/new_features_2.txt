@@ -35,6 +35,66 @@ SELECT address.{ city, zip, country } FROM person;
     (semi_colon)))
 
 ==================
+LET Object Destructure
+==================
+
+LET { $name, $age } = $obj;
+
+---
+
+(source_file
+  (expressions
+    (expression
+      (subquery_statement
+        (let_statement
+          (keyword_let)
+          (object_destructure
+            (destructure_binding
+              (variable_name))
+            (destructure_binding
+              (variable_name)))
+          (value
+            (base_value
+              (variable_name))))))
+    (semi_colon)))
+
+==================
+FOR Object Destructure
+==================
+
+FOR { $id, $name } IN $items { RETURN $id; };
+
+---
+
+(source_file
+  (expressions
+    (expression
+      (subquery_statement
+        (for_statement
+          (keyword_for)
+          (object_destructure
+            (destructure_binding
+              (variable_name))
+            (destructure_binding
+              (variable_name)))
+          (keyword_in)
+          (value
+            (base_value
+              (variable_name)))
+          (block
+            (expressions
+              (expression
+                (subquery_statement
+                  (return_statement
+                    (return_clause
+                      (keyword_return)
+                      (value
+                        (base_value
+                          (variable_name)))))))
+              (semi_colon))))))
+    (semi_colon)))
+
+==================
 Backtick Quoted Identifier
 ==================
 

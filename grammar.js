@@ -332,7 +332,7 @@ export default grammar({
 		continue_statement: ($) => seq($.keyword_continue),
 
 		for_statement: ($) =>
-			seq($.keyword_for, $.variable_name, $.keyword_in, $.value, $.block),
+			seq($.keyword_for, choice($.variable_name, $.object_destructure), $.keyword_in, $.value, $.block),
 
 		return_statement: ($) => $.return_clause,
 
@@ -380,7 +380,7 @@ export default grammar({
 		let_statement: ($) =>
 			seq(
 				$.keyword_let,
-				$.variable_name,
+				choice($.variable_name, $.object_destructure),
 				'=',
 				choice($.closure, $.value, $.subquery_statement),
 			),
@@ -494,9 +494,12 @@ export default grammar({
 				optional(choice($.if_not_exists_clause, $.keyword_overwrite)),
 				$.custom_function_name,
 				$.param_list,
+				optional($.returns_clause),
 				$.block,
 				repeat(choice($.permissions_basic_clause, $.comment_clause)),
 			),
+
+		returns_clause: ($) => seq('->', $.type),
 
 		define_index_statement: ($) =>
 			seq(
@@ -1083,7 +1086,7 @@ export default grammar({
 				),
 			),
 
-		omit_clause: ($) => seq($.keyword_omit, $.value),
+		omit_clause: ($) => seq($.keyword_omit, commaSeparated($.value)),
 
 		with_clause: ($) =>
 			seq(
@@ -1573,6 +1576,14 @@ export default grammar({
 		destructure: ($) =>
 			seq('.', '{', commaSeparated($.destructure_field), '}'),
 
+		// Object destructuring binding for LET and FOR statements
+		// e.g. LET { name, age } = $obj; or FOR { id, name } IN (SELECT * FROM user) { ... }
+		object_destructure: ($) =>
+			seq('{', commaSeparated($.destructure_binding), '}'),
+
+		destructure_binding: ($) =>
+			seq($.variable_name, optional(seq(':', $.type))),
+
 		destructure_field: ($) =>
 			seq($.identifier, optional(seq($.keyword_as, $.identifier))),
 
@@ -1603,7 +1614,7 @@ export default grammar({
 
 		subscript: ($) =>
 			seq(
-				'.',
+				choice('.', '?.'),
 				choice(
 					prec(1, seq($.identifier, $.argument_list)),
 					seq($.function_name, $.argument_list),

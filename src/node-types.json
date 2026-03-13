@@ -1374,6 +1374,10 @@
         {
           "type": "permissions_basic_clause",
           "named": true
+        },
+        {
+          "type": "returns_clause",
+          "named": true
         }
       ]
     }
@@ -1865,6 +1869,25 @@
     }
   },
   {
+    "type": "destructure_binding",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "type",
+          "named": true
+        },
+        {
+          "type": "variable_name",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
     "type": "destructure_field",
     "named": true,
     "fields": {},
@@ -2342,6 +2365,10 @@
         },
         {
           "type": "keyword_in",
+          "named": true
+        },
+        {
+          "type": "object_destructure",
           "named": true
         },
         {
@@ -3001,6 +3028,10 @@
           "named": true
         },
         {
+          "type": "object_destructure",
+          "named": true
+        },
+        {
           "type": "subquery_statement",
           "named": true
         },
@@ -3351,6 +3382,21 @@
       "types": [
         {
           "type": "object_property",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "object_destructure",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "destructure_binding",
           "named": true
         }
       ]
@@ -4471,6 +4517,21 @@
       "types": [
         {
           "type": "return_clause",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "returns_clause",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": false,
+      "required": true,
+      "types": [
+        {
+          "type": "type",
           "named": true
         }
       ]
@@ -5928,6 +5989,10 @@
   },
   {
     "type": "?",
+    "named": false
+  },
+  {
+    "type": "?.",
     "named": false
   },
   {

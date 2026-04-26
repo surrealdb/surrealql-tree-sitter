@@ -102,7 +102,6 @@
   (keyword_hs512)
   (keyword_if)
   (keyword_ignore)
-  (keyword_import)
   (keyword_in)
   (keyword_include)
   (keyword_index)

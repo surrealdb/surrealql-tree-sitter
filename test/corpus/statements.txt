@@ -990,6 +990,342 @@ DEFINE INDEX OVERWRITE documents_vec_index ON TABLE documents FIELDS embedding H
           (Keyword)
           (Keyword))))))
 
+=============================================
+define :: Define index fulltext analyzer bm25
+=============================================
+
+DEFINE INDEX OVERWRITE article_body_search ON article FIELDS body FULLTEXT ANALYZER english BM25;
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (OverwriteClause
+      (Keyword))
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)))
+    (IndexClause
+      (FullTextClause
+        (Keyword)
+        (Keyword)
+        (Ident)
+        (Bm25Clause
+          (Keyword))))))
+
+==========================================================
+define :: Define index fulltext bm25 parameters highlights
+==========================================================
+
+DEFINE INDEX blog_title ON blog FIELDS title FULLTEXT ANALYZER simple BM25(1.2,0.75) HIGHLIGHTS
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)))
+    (IndexClause
+      (FullTextClause
+        (Keyword)
+        (Keyword)
+        (Ident)
+        (Bm25Clause
+          (Keyword)
+          (Number
+            (Float))
+          (Number
+            (Float)))
+        (Keyword)))))
+
+====================================================
+define :: Define index fulltext options in any order
+====================================================
+
+DEFINE INDEX i ON b FIELDS t FULLTEXT HIGHLIGHTS BM25 ANALYZER simple
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)))
+    (IndexClause
+      (FullTextClause
+        (Keyword)
+        (Keyword)
+        (Bm25Clause
+          (Keyword))
+        (Keyword)
+        (Ident)))))
+
+================================================
+define :: Define index fulltext without analyzer
+================================================
+
+DEFINE INDEX i ON b FIELDS t FULLTEXT BM25 HIGHLIGHTS
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)))
+    (IndexClause
+      (FullTextClause
+        (Keyword)
+        (Bm25Clause
+          (Keyword))
+        (Keyword)))))
+
+============================
+define :: Define index count
+============================
+
+DEFINE INDEX idx_count ON t COUNT
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (IndexClause
+      (CountClause
+        (Keyword)))))
+
+==================================
+define :: Define index count where
+==================================
+
+DEFINE INDEX item_active_count ON item COUNT WHERE status = "active" CONCURRENTLY
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (IndexClause
+      (CountClause
+        (Keyword)
+        (WhereClause
+          (Keyword)
+          (BinaryExpression
+            (Ident)
+            (Operator)
+            (String)))))
+    (ConcurrentlyClause
+      (Keyword))))
+
+=================================================
+define :: Define index count comment concurrently
+=================================================
+
+DEFINE INDEX idx ON users COUNT COMMENT "Users expected to grow" CONCURRENTLY
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (IndexClause
+      (CountClause
+        (Keyword)))
+    (CommentClause
+      (Keyword)
+      (String))
+    (ConcurrentlyClause
+      (Keyword))))
+
+==============================
+define :: Define index diskann
+==============================
+
+DEFINE INDEX IF NOT EXISTS diskann_pts ON pts FIELDS point DISKANN DIMENSION 4 DIST EUCLIDEAN TYPE F32 DEGREE 8 L_BUILD 20 ALPHA 1.4 HASHED_VECTOR
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (IfNotExistsClause
+      (Keyword)
+      (Keyword)
+      (Keyword))
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)))
+    (IndexClause
+      (DiskAnnClause
+        (Keyword)
+        (IndexDimensionClause
+          (Keyword)
+          (Number
+            (Int)))
+        (DiskAnnDistClause
+          (Keyword)
+          (Distance))
+        (IndexTypeClause
+          (Keyword)
+          (Keyword))
+        (IndexDegreeClause
+          (Keyword)
+          (Number
+            (Int)))
+        (IndexLBuildClause
+          (Keyword)
+          (Number
+            (Int)))
+        (IndexAlphaClause
+          (Keyword)
+          (Number
+            (Float)))
+        (IndexHashedVectorClause
+          (Keyword))))))
+
+================================================
+define :: Define index diskann inner product f16
+================================================
+
+DEFINE INDEX emb ON embeddings FIELDS vec DISKANN DIMENSION 8 DISTANCE INNER_PRODUCT TYPE F16
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)))
+    (IndexClause
+      (DiskAnnClause
+        (Keyword)
+        (IndexDimensionClause
+          (Keyword)
+          (Number
+            (Int)))
+        (DiskAnnDistClause
+          (Keyword)
+          (Distance))
+        (IndexTypeClause
+          (Keyword)
+          (Keyword))))))
+
+=========================================
+define :: Define index hnsw hashed vector
+=========================================
+
+DEFINE INDEX idx_embedding ON TABLE test FIELDS embedding HNSW DIMENSION 3 DISTANCE COSINE HASHED_VECTOR
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)))
+    (IndexClause
+      (HnswClause
+        (Keyword)
+        (IndexDimensionClause
+          (Keyword)
+          (Number
+            (Int)))
+        (HnswDistClause
+          (Keyword)
+          (Distance))
+        (IndexHashedVectorClause
+          (Keyword))))))
+
+===========================================
+define :: Define index array element fields
+===========================================
+
+DEFINE INDEX tag_age ON article FIELDS tags.*, age
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)
+        (Any))
+      (Idiom
+        (Ident)))))
+
 =========================
 define :: Define function
 =========================

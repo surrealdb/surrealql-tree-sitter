@@ -6478,6 +6478,14 @@
         },
         {
           "type": "SYMBOL",
+          "name": "CountClause"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "FullTextClause"
+        },
+        {
+          "type": "SYMBOL",
           "name": "SearchAnalyzerClause"
         },
         {
@@ -6487,6 +6495,10 @@
         {
           "type": "SYMBOL",
           "name": "HnswClause"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "DiskAnnClause"
         }
       ]
     },
@@ -6498,6 +6510,85 @@
       },
       "named": true,
       "value": "Keyword"
+    },
+    "CountClause": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_kw_count"
+          },
+          "named": true,
+          "value": "Keyword"
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "WhereClause"
+            },
+            {
+              "type": "BLANK"
+            }
+          ]
+        }
+      ]
+    },
+    "FullTextClause": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_kw_fulltext"
+          },
+          "named": true,
+          "value": "Keyword"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SEQ",
+                "members": [
+                  {
+                    "type": "ALIAS",
+                    "content": {
+                      "type": "SYMBOL",
+                      "name": "_kw_analyzer"
+                    },
+                    "named": true,
+                    "value": "Keyword"
+                  },
+                  {
+                    "type": "SYMBOL",
+                    "name": "Ident"
+                  }
+                ]
+              },
+              {
+                "type": "SYMBOL",
+                "name": "Bm25Clause"
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "SYMBOL",
+                  "name": "_kw_highlights"
+                },
+                "named": true,
+                "value": "Keyword"
+              }
+            ]
+          }
+        }
+      ]
     },
     "SearchAnalyzerClause": {
       "type": "SEQ",
@@ -6912,6 +7003,10 @@
               {
                 "type": "SYMBOL",
                 "name": "IndexKeepPrunedConnectionsClause"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "IndexHashedVectorClause"
               }
             ]
           }
@@ -6922,13 +7017,132 @@
       "type": "SEQ",
       "members": [
         {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_kw_dist"
+              },
+              "named": true,
+              "value": "Keyword"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_kw_distance"
+              },
+              "named": true,
+              "value": "Keyword"
+            }
+          ]
+        },
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "SYMBOL",
+              "name": "Distance"
+            },
+            {
+              "type": "SEQ",
+              "members": [
+                {
+                  "type": "ALIAS",
+                  "content": {
+                    "type": "SYMBOL",
+                    "name": "_kw_minkowski"
+                  },
+                  "named": true,
+                  "value": "Distance"
+                },
+                {
+                  "type": "SYMBOL",
+                  "name": "Number"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "DiskAnnClause": {
+      "type": "SEQ",
+      "members": [
+        {
           "type": "ALIAS",
           "content": {
             "type": "SYMBOL",
-            "name": "_kw_dist"
+            "name": "_kw_diskann"
           },
           "named": true,
           "value": "Keyword"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "IndexDimensionClause"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "SYMBOL",
+                "name": "DiskAnnDistClause"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "IndexTypeClause"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "IndexDegreeClause"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "IndexLBuildClause"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "IndexAlphaClause"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "IndexHashedVectorClause"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "DiskAnnDistClause": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "CHOICE",
+          "members": [
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_kw_dist"
+              },
+              "named": true,
+              "value": "Keyword"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_kw_distance"
+              },
+              "named": true,
+              "value": "Keyword"
+            }
+          ]
         },
         {
           "type": "CHOICE",
@@ -7084,6 +7298,69 @@
       },
       "named": true,
       "value": "Keyword"
+    },
+    "IndexHashedVectorClause": {
+      "type": "ALIAS",
+      "content": {
+        "type": "SYMBOL",
+        "name": "_kw_hashed_vector"
+      },
+      "named": true,
+      "value": "Keyword"
+    },
+    "IndexDegreeClause": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_kw_degree"
+          },
+          "named": true,
+          "value": "Keyword"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "Number"
+        }
+      ]
+    },
+    "IndexLBuildClause": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_kw_l_build"
+          },
+          "named": true,
+          "value": "Keyword"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "Number"
+        }
+      ]
+    },
+    "IndexAlphaClause": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_kw_alpha"
+          },
+          "named": true,
+          "value": "Keyword"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "Number"
+        }
+      ]
     },
     "TableTypeClause": {
       "type": "SEQ",
@@ -12252,11 +12529,19 @@
         },
         {
           "type": "SYMBOL",
+          "name": "_kw_cosine_normalized"
+        },
+        {
+          "type": "SYMBOL",
           "name": "_kw_euclidean"
         },
         {
           "type": "SYMBOL",
           "name": "_kw_hamming"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_kw_inner_product"
         },
         {
           "type": "SYMBOL",
@@ -12443,6 +12728,15 @@
               "type": "ALIAS",
               "content": {
                 "type": "SYMBOL",
+                "name": "_kw_f16"
+              },
+              "named": true,
+              "value": "Keyword"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
                 "name": "_kw_f32"
               },
               "named": true,
@@ -12453,6 +12747,15 @@
               "content": {
                 "type": "SYMBOL",
                 "name": "_kw_f64"
+              },
+              "named": true,
+              "value": "Keyword"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_kw_i8"
               },
               "named": true,
               "value": "Keyword"
@@ -12480,6 +12783,15 @@
               "content": {
                 "type": "SYMBOL",
                 "name": "_kw_i64"
+              },
+              "named": true,
+              "value": "Keyword"
+            },
+            {
+              "type": "ALIAS",
+              "content": {
+                "type": "SYMBOL",
+                "name": "_kw_u8"
               },
               "named": true,
               "value": "Keyword"
@@ -12703,6 +13015,10 @@
     "_kw_dist": {
       "type": "PATTERN",
       "value": "[dD][iI][sS][tT]"
+    },
+    "_kw_distance": {
+      "type": "PATTERN",
+      "value": "[dD][iI][sS][tT][aA][nN][cC][eE]"
     },
     "_kw_doc_ids_cache": {
       "type": "PATTERN",
@@ -13304,6 +13620,10 @@
       "type": "PATTERN",
       "value": "[cC][oO][sS][iI][nN][eE]"
     },
+    "_kw_cosine_normalized": {
+      "type": "PATTERN",
+      "value": "[cC][oO][sS][iI][nN][eE][__][nN][oO][rR][mM][aA][lL][iI][zZ][eE][dD]"
+    },
     "_kw_euclidean": {
       "type": "PATTERN",
       "value": "[eE][uU][cC][lL][iI][dD][eE][aA][nN]"
@@ -13311,6 +13631,10 @@
     "_kw_hamming": {
       "type": "PATTERN",
       "value": "[hH][aA][mM][mM][iI][nN][gG]"
+    },
+    "_kw_inner_product": {
+      "type": "PATTERN",
+      "value": "[iI][nN][nN][eE][rR][__][pP][rR][oO][dD][uU][cC][tT]"
     },
     "_kw_jaccard": {
       "type": "PATTERN",
@@ -13424,6 +13748,10 @@
       "type": "PATTERN",
       "value": "[rR][sS][55][11][22]"
     },
+    "_kw_f16": {
+      "type": "PATTERN",
+      "value": "[fF][11][66]"
+    },
     "_kw_f32": {
       "type": "PATTERN",
       "value": "[fF][33][22]"
@@ -13431,6 +13759,10 @@
     "_kw_f64": {
       "type": "PATTERN",
       "value": "[fF][66][44]"
+    },
+    "_kw_i8": {
+      "type": "PATTERN",
+      "value": "[iI][88]"
     },
     "_kw_i16": {
       "type": "PATTERN",
@@ -13443,6 +13775,10 @@
     "_kw_i64": {
       "type": "PATTERN",
       "value": "[iI][66][44]"
+    },
+    "_kw_u8": {
+      "type": "PATTERN",
+      "value": "[uU][88]"
     },
     "_kw_rand": {
       "type": "PATTERN",
@@ -13523,6 +13859,26 @@
     "_kw_fulltext": {
       "type": "PATTERN",
       "value": "[fF][uU][lL][lL][tT][eE][xX][tT]"
+    },
+    "_kw_diskann": {
+      "type": "PATTERN",
+      "value": "[dD][iI][sS][kK][aA][nN][nN]"
+    },
+    "_kw_degree": {
+      "type": "PATTERN",
+      "value": "[dD][eE][gG][rR][eE][eE]"
+    },
+    "_kw_l_build": {
+      "type": "PATTERN",
+      "value": "[lL][__][bB][uU][iI][lL][dD]"
+    },
+    "_kw_alpha": {
+      "type": "PATTERN",
+      "value": "[aA][lL][pP][hH][aA]"
+    },
+    "_kw_hashed_vector": {
+      "type": "PATTERN",
+      "value": "[hH][aA][sS][hH][eE][dD][__][vV][eE][cC][tT][oO][rR]"
     },
     "_any_kw": {
       "type": "CHOICE",
@@ -13710,6 +14066,10 @@
         {
           "type": "SYMBOL",
           "name": "_kw_dist"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "_kw_distance"
         },
         {
           "type": "SYMBOL",

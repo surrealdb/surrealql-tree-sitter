@@ -1174,14 +1174,41 @@ export default grammar({
 				csep($.Idiom),
 			),
 
+		// The index kinds. SurrealDB 3 reads `UNIQUE`, `COUNT`, `FULLTEXT`,
+		// `HNSW` and `DISKANN` (surrealdb-core `syn/parser/stmt/define.rs`,
+		// `parse_define_index`); `SEARCH ANALYZER` and `MTREE` are the pre-3.0
+		// spellings, kept so 2.x schemas still parse.
 		IndexClause: ($) =>
 			choice(
 				$.UniqueClause,
+				$.CountClause,
+				$.FullTextClause,
 				$.SearchAnalyzerClause,
 				$.MtreeClause,
 				$.HnswClause,
+				$.DiskAnnClause,
 			),
 		UniqueClause: ($) => alias($._kw_unique, $.Keyword),
+
+		// `COUNT [WHERE <condition>]`. The condition is optional: a bare
+		// `COUNT` is an unconditional count index.
+		CountClause: ($) =>
+			seq(alias($._kw_count, $.Keyword), optional($.WhereClause)),
+
+		// `FULLTEXT [ANALYZER <name>] [BM25 [(<k1>, <b>)]] [HIGHLIGHTS]`. The
+		// engine accepts the three options in any order and requires none of
+		// them — an absent analyzer falls back to `like`.
+		FullTextClause: ($) =>
+			seq(
+				alias($._kw_fulltext, $.Keyword),
+				repeat(
+					choice(
+						seq(alias($._kw_analyzer, $.Keyword), $.Ident),
+						$.Bm25Clause,
+						alias($._kw_highlights, $.Keyword),
+					),
+				),
+			),
 
 		SearchAnalyzerClause: ($) =>
 			seq(
@@ -1260,12 +1287,46 @@ export default grammar({
 						$.IndexEfcClause,
 						$.IndexExtendCandidatesClause,
 						$.IndexKeepPrunedConnectionsClause,
+						$.IndexHashedVectorClause,
 					),
 				),
 			),
+		// The engine lexes `DIST` and `DISTANCE` as the same keyword.
 		HnswDistClause: ($) =>
 			seq(
-				alias($._kw_dist, $.Keyword),
+				choice(
+					alias($._kw_dist, $.Keyword),
+					alias($._kw_distance, $.Keyword),
+				),
+				choice(
+					$.Distance,
+					seq(alias($._kw_minkowski, $.Distance), $.Number),
+				),
+			),
+
+		// `DISKANN DIMENSION <n> [DIST <d>] [TYPE <t>] [DEGREE <n>]
+		// [L_BUILD <n>] [ALPHA <n>] [HASHED_VECTOR]` (SurrealDB 3.x).
+		DiskAnnClause: ($) =>
+			seq(
+				alias($._kw_diskann, $.Keyword),
+				$.IndexDimensionClause,
+				repeat(
+					choice(
+						$.DiskAnnDistClause,
+						$.IndexTypeClause,
+						$.IndexDegreeClause,
+						$.IndexLBuildClause,
+						$.IndexAlphaClause,
+						$.IndexHashedVectorClause,
+					),
+				),
+			),
+		DiskAnnDistClause: ($) =>
+			seq(
+				choice(
+					alias($._kw_dist, $.Keyword),
+					alias($._kw_distance, $.Keyword),
+				),
 				choice(
 					$.Distance,
 					seq(alias($._kw_minkowski, $.Distance), $.Number),
@@ -1284,6 +1345,10 @@ export default grammar({
 			alias($._kw_extend_candidates, $.Keyword),
 		IndexKeepPrunedConnectionsClause: ($) =>
 			alias($._kw_keep_pruned_connections, $.Keyword),
+		IndexHashedVectorClause: ($) => alias($._kw_hashed_vector, $.Keyword),
+		IndexDegreeClause: ($) => seq(alias($._kw_degree, $.Keyword), $.Number),
+		IndexLBuildClause: ($) => seq(alias($._kw_l_build, $.Keyword), $.Number),
+		IndexAlphaClause: ($) => seq(alias($._kw_alpha, $.Keyword), $.Number),
 
 		// Define table
 		TableTypeClause: ($) =>
@@ -2193,8 +2258,10 @@ export default grammar({
 			choice(
 				$._kw_chebyshev,
 				$._kw_cosine,
+				$._kw_cosine_normalized,
 				$._kw_euclidean,
 				$._kw_hamming,
+				$._kw_inner_product,
 				$._kw_jaccard,
 				$._kw_manhattan,
 				$._kw_minkowski,
@@ -2246,11 +2313,14 @@ export default grammar({
 			seq(
 				optional(alias($._kw_type, $.Keyword)),
 				choice(
+					alias($._kw_f16, $.Keyword),
 					alias($._kw_f32, $.Keyword),
 					alias($._kw_f64, $.Keyword),
+					alias($._kw_i8, $.Keyword),
 					alias($._kw_i16, $.Keyword),
 					alias($._kw_i32, $.Keyword),
 					alias($._kw_i64, $.Keyword),
+					alias($._kw_u8, $.Keyword),
 				),
 			),
 
@@ -2317,6 +2387,7 @@ export default grammar({
 		_kw_desc: ($) => kw('desc'),
 		_kw_dimension: ($) => kw('dimension'),
 		_kw_dist: ($) => kw('dist'),
+		_kw_distance: ($) => kw('distance'),
 		_kw_doc_ids_cache: ($) => kw('doc_ids_cache'),
 		_kw_doc_ids_order: ($) => kw('doc_ids_order'),
 		_kw_doc_lengths_cache: ($) => kw('doc_lengths_cache'),
@@ -2471,8 +2542,10 @@ export default grammar({
 		// Distance keywords
 		_kw_chebyshev: ($) => kw('chebyshev'),
 		_kw_cosine: ($) => kw('cosine'),
+		_kw_cosine_normalized: ($) => kw('cosine_normalized'),
 		_kw_euclidean: ($) => kw('euclidean'),
 		_kw_hamming: ($) => kw('hamming'),
+		_kw_inner_product: ($) => kw('inner_product'),
 		_kw_jaccard: ($) => kw('jaccard'),
 		_kw_manhattan: ($) => kw('manhattan'),
 		_kw_minkowski: ($) => kw('minkowski'),
@@ -2508,12 +2581,15 @@ export default grammar({
 		_kw_rs384: ($) => kw('rs384'),
 		_kw_rs512: ($) => kw('rs512'),
 
-		// Index type keywords (f32/f64/i16/i32/i64)
+		// Index vector type keywords (f16/f32/f64/i8/i16/i32/i64/u8)
+		_kw_f16: ($) => kw('f16'),
 		_kw_f32: ($) => kw('f32'),
 		_kw_f64: ($) => kw('f64'),
+		_kw_i8: ($) => kw('i8'),
 		_kw_i16: ($) => kw('i16'),
 		_kw_i32: ($) => kw('i32'),
 		_kw_i64: ($) => kw('i64'),
+		_kw_u8: ($) => kw('u8'),
 
 		_kw_rand: ($) => kw('rand'),
 		_kw_count: ($) => kw('count'),
@@ -2537,6 +2613,11 @@ export default grammar({
 		_kw_future: ($) => kw('future'),
 		_kw_import: ($) => kw('import'),
 		_kw_fulltext: ($) => kw('fulltext'),
+		_kw_diskann: ($) => kw('diskann'),
+		_kw_degree: ($) => kw('degree'),
+		_kw_l_build: ($) => kw('l_build'),
+		_kw_alpha: ($) => kw('alpha'),
+		_kw_hashed_vector: ($) => kw('hashed_vector'),
 
 		// Catch-all keyword union, used by visible Keyword rule
 		_any_kw: ($) =>
@@ -2587,6 +2668,7 @@ export default grammar({
 				$._kw_desc,
 				$._kw_dimension,
 				$._kw_dist,
+				$._kw_distance,
 				$._kw_doc_ids_cache,
 				$._kw_doc_ids_order,
 				$._kw_doc_lengths_cache,

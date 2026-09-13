@@ -2342,3 +2342,335 @@ a IS NOT b
     (Ident)
     (Operator)
     (Ident)))
+
+=====================================
+types :: A cast takes the whole range
+=====================================
+
+RETURN <array> 1..5
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (TypeCast
+      (TypeName)
+      (Range
+        (Number
+          (Int))
+        (RangeOp)
+        (Number
+          (Int))))))
+
+==============================================
+types :: A binary operator is outside the cast
+==============================================
+
+RETURN <string> 1 + 2
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (BinaryExpression
+      (TypeCast
+        (TypeName)
+        (Number
+          (Int)))
+      (Operator)
+      (Number
+        (Int)))))
+
+====================================
+types :: A cast takes the whole path
+====================================
+
+RETURN <string> $x.y
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (TypeCast
+      (TypeName)
+      (Path
+        (VariableName)
+        (Subscript
+          (Ident))))))
+
+=======================================
+types :: A cast takes a prefix operator
+=======================================
+
+RETURN <string> -$x
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (TypeCast
+      (TypeName)
+      (PrefixExpression
+        (Operator)
+        (VariableName)))))
+
+
+==============================
+values :: An empty destructure
+==============================
+
+SELECT owner.{} AS anonymous FROM organization
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Path
+          (Ident)
+          (Subscript
+            (Destructure
+              (BraceOpen)
+              (BraceClose))))
+        (Keyword)
+        (Ident)))
+    (Keyword)
+    (Ident)))
+
+=================================================
+values :: An empty destructure continues the path
+=================================================
+
+SELECT owner.{}.username AS n FROM organization
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Path
+          (Ident)
+          (Subscript
+            (Destructure
+              (BraceOpen)
+              (BraceClose)))
+          (Subscript
+            (Ident)))
+        (Keyword)
+        (Ident)))
+    (Keyword)
+    (Ident)))
+
+=================================================
+values :: A parenthesised closure called in place
+=================================================
+
+RETURN (|$x| $x + 1)(41)
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (FunctionCall
+      (SubQuery
+        (Closure
+          (Pipe)
+          (ParamDefinition
+            (VariableName))
+          (Pipe)
+          (BinaryExpression
+            (VariableName)
+            (Operator)
+            (Number
+              (Int)))))
+      (ArgumentList
+        (Number
+          (Int))))))
+
+==============================================
+values :: A parenthesised path called in place
+==============================================
+
+($obj.fnc)()
+
+---
+
+(SurrealQL
+  (FunctionCall
+    (SubQuery
+      (Path
+        (VariableName)
+        (Subscript
+          (Ident))))
+    (ArgumentList)))
+
+======================================
+values :: Extend-if-missing assignment
+======================================
+
+UPSERT person:test SET sport +?= 'football'
+
+---
+
+(SurrealQL
+  (UpsertStatement
+    (Keyword)
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (SetClause
+      (Keyword)
+      (FieldAssignment
+        (Ident)
+        (Operator)
+        (String)))))
+
+=====================================================
+values :: count is a field name when it is not called
+=====================================================
+
+SELECT count FROM probe:c
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Ident)))
+    (Keyword)
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))))
+
+==================================
+values :: count as an ORDER BY key
+==================================
+
+SELECT region, count() AS count FROM sale GROUP BY region ORDER BY count DESC
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Ident))
+      (Predicate
+        (FunctionCall
+          (FunctionName)
+          (ArgumentList))
+        (Keyword)
+        (Ident)))
+    (Keyword)
+    (Ident)
+    (GroupClause
+      (Keyword)
+      (Keyword)
+      (Idiom
+        (Ident)))
+    (OrderClause
+      (Keyword)
+      (Keyword)
+      (Order
+        (Idiom
+          (Ident))
+        (Keyword)))))
+
+=====================================================
+values :: Non-reserved clause keywords as field names
+=====================================================
+
+SELECT * FROM t WHERE order = 1 AND key = 2 AND start = 3 AND limit = 4 AND group = 5
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Any))
+    (Keyword)
+    (Ident)
+    (WhereClause
+      (Keyword)
+      (BinaryExpression
+        (BinaryExpression
+          (BinaryExpression
+            (BinaryExpression
+              (BinaryExpression
+                (Ident)
+                (Operator)
+                (Number
+                  (Int)))
+              (Operator)
+              (BinaryExpression
+                (Ident)
+                (Operator)
+                (Number
+                  (Int))))
+            (Operator)
+            (BinaryExpression
+              (Ident)
+              (Operator)
+              (Number
+                (Int))))
+          (Operator)
+          (BinaryExpression
+            (Ident)
+            (Operator)
+            (Number
+              (Int))))
+        (Operator)
+        (BinaryExpression
+          (Ident)
+          (Operator)
+          (Number
+            (Int)))))))
+
+==============================================
+values :: type is a field name inside a filter
+==============================================
+
+SELECT tags[WHERE type = 'library'][0].value FROM documentation:test
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Path
+          (Ident)
+          (Filter
+            (WhereClause
+              (Keyword)
+              (BinaryExpression
+                (Ident)
+                (Operator)
+                (String))))
+          (Filter
+            (Number
+              (Int)))
+          (Subscript
+            (Ident)))))
+    (Keyword)
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))))
+

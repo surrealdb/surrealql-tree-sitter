@@ -54,6 +54,12 @@ function kwAlt(words) {
  * `time::MAX` and `duration::MIN` at parse time, so listing them exactly is
  * what keeps the grammar from being looser than the engine.
  */
+/**
+ * `time::` has three, and only three: `time::now` is a function and 3.2.3
+ * parse-errors it without an argument list.
+ */
+const TIME_CONSTANTS = ['EPOCH', 'MAXIMUM', 'MINIMUM'];
+
 const MATH_CONSTANTS = [
 	'E',
 	'FRAC_1_PI',
@@ -80,6 +86,19 @@ const MATH_CONSTANTS = [
 	'TAU',
 ];
 
+/**
+ * `DROP <clause>` — ALTER's unset form. Each subject takes its own set, and
+ * the sets are not interchangeable: 3.2.3 parse-errors `ALTER USER … DROP
+ * DURATION`, `ALTER FIELD … DROP PERMISSIONS` and `ALTER INDEX … DROP
+ * CHANGEFEED`, all of which are legal DROPs on some *other* subject.
+ */
+function dropOf($, ...names) {
+	return seq(
+		alias($._kw_drop, $.Keyword),
+		choice(...names.map((n) => alias($[`_kw_${n}`], $.Keyword))),
+	);
+}
+
 /** Comma separated list (no trailing comma) */
 function csep(rule) {
 	return seq(rule, repeat(seq(',', rule)));
@@ -96,7 +115,10 @@ function piped(rule) {
 }
 
 /** Digit sequence with optional underscore separators (e.g. 1_000_000) */
-const DIGITS = /[0-9]+(?:_[0-9]+)*/;
+// 3.2.3 takes a run of underscores anywhere after the first digit, and a
+// trailing one: `1_`, `1__2`, `1_____.0_____` and
+// `00009223372036854775_____807` all evaluate.
+const DIGITS = /[0-9][0-9_]*/;
 
 /** Exponent part of a float or decimal, e.g. `e-7`. */
 const EXPONENT = /[eE][+-]?[0-9]+(?:_[0-9]+)*/;
@@ -144,6 +166,11 @@ export default grammar({
 		[
 			'prefix',
 			'range',
+			// A cast binds looser than a range (`<array> 1..5` is
+			// `[1, 2, 3, 4]` on 3.2.3) and tighter than every binary operator
+			// (`<string> 1 + 2` is a string-plus-int error there, so the cast
+			// took only the `1`).
+			'cast',
 			'method',
 			// Binary operator tiers, tightest to loosest. Splitting the former
 			// single 'binary' level is what makes `a > 1 AND b > 2` parse as
@@ -179,8 +206,25 @@ export default grammar({
 		// ambiguity: the ELSE either continues this chain or closes the nested
 		// one. Both are real readings; let GLR settle it.
 		[$.Modern],
+		// The same dangling ELSE in the THEN…END form, now that a branch body
+		// is a value and a value can be another IF: `ELSE IF` either continues
+		// this chain or opens a nested one.
+		[$.Legacy],
 		[$._prefixOperand, $.Path],
 		[$._value, $.Path],
+		// After `ALTER API "/x" FOR any`, a `DROP` opens either the group's own
+		// `DROP THEN` or the statement's `DROP COMMENT`. The token after DROP
+		// decides — LR(2), not ambiguous.
+		[$._apiForClause],
+		// `ALTER FIELD f ON t FLEXIBLE` clears the flag on its own, and
+		// `FLEXIBLE TYPE object` is one TypeClause. Which one FLEXIBLE opens
+		// is decided by the token after it — LR(2), not ambiguous.
+		[$.AlterStatement, $.TypeClause],
+		// After `WITH JWT <jwt>` inside DEFINE ACCESS … TYPE RECORD, a `WITH`
+		// starts either the JWT clause's own `WITH ISSUER` or the type's
+		// trailing `WITH REFRESH`. Deciding needs the token after `WITH`, so
+		// the grammar is LR(2) here — not ambiguous. Let GLR look ahead.
+		[$.JwtClause],
 	],
 
 	rules: {
@@ -188,7 +232,11 @@ export default grammar({
 		// Top-level entry
 		// ================================================================
 
-		SurrealQL: ($) => optional($._expressions),
+		// A source is a statement list, *or* nothing but semicolons. The two
+		// do not mix: 3.2.3 accepts `;` and `;;;` and parse-errors on
+		// `SELECT 1;;`, `;SELECT 1;` and `SELECT 1; ;` alike.
+		SurrealQL: ($) => optional(choice($._expressions, $._onlySemicolons)),
+		_onlySemicolons: ($) => repeat1(';'),
 
 		_expressions: ($) =>
 			prec.right(
@@ -205,13 +253,19 @@ export default grammar({
 		// Statements
 		// ================================================================
 
+		// IfElseStatement is deliberately absent: IF is a value (see `_value`),
+		// so listing it here as well would make every `IF …` in an expression
+		// position reachable two ways for the same tree.
 		_subqueryStatement: ($) =>
+			choice($.SelectStatement, $._nonSelectSubqueryStatement),
+		// Everything in `_subqueryStatement` except SELECT. Named so that
+		// `EXPLAIN` can take a statement without competing with SELECT's own
+		// `EXPLAIN` prefix — see `ExplainStatement`.
+		_nonSelectSubqueryStatement: ($) =>
 			choice(
-				$.IfElseStatement,
 				$.LetStatement,
 				$.DeleteStatement,
 				$.CreateStatement,
-				$.SelectStatement,
 				$.RelateStatement,
 				$.UpdateStatement,
 				$.RemoveStatement,
@@ -223,8 +277,10 @@ export default grammar({
 				$.InsertStatement,
 			),
 
-		_statement: ($) =>
+		_statement: ($) => choice($._nonSelectStatement, $.SelectStatement),
+		_nonSelectStatement: ($) =>
 			choice(
+				$.ExplainStatement,
 				$.BeginStatement,
 				$.CancelStatement,
 				$.CommitStatement,
@@ -239,9 +295,29 @@ export default grammar({
 				$.BreakStatement,
 				$.ContinueStatement,
 				$.ForStatement,
-				$.ThrowStatement,
-				$._subqueryStatement,
+				$._nonSelectSubqueryStatement,
 			),
+
+		// EXPLAIN is a statement prefix, not a SELECT clause: 3.2.3 explains a
+		// closure, a RETURN, a FOR, a BREAK, a graph path, a bare `9`. SELECT
+		// keeps its own prefix (the tree it has always had), so the body here
+		// is every *other* expression; `FORMAT JSON` settles the one overlap,
+		// because after it even a SELECT belongs to this rule.
+		//
+		// `FORMAT` takes JSON and nothing else — `FORMAT XML` is a parse
+		// error there.
+		ExplainStatement: ($) =>
+			seq(
+				alias($._kw_explain, $.Keyword),
+				optional(alias($._kw_analyze, $.Keyword)),
+				choice(
+					seq($.FormatClause, $._expression),
+					$._nonSelectStatement,
+					$._value,
+				),
+			),
+		FormatClause: ($) =>
+			seq(alias($._kw_format, $.Keyword), alias($._kw_json, $.Keyword)),
 
 		// ----------------------------------------------------------------
 		// Transaction statements
@@ -272,9 +348,20 @@ export default grammar({
 		BreakStatement: ($) => alias($._kw_break, $.Keyword),
 		ContinueStatement: ($) => alias($._kw_continue, $.Keyword),
 		SleepStatement: ($) => seq(alias($._kw_sleep, $.Keyword), $.Duration),
-		ThrowStatement: ($) => seq(alias($._kw_throw, $.Keyword), $._value),
+		// Right-associative: the argument runs as far as it can, so
+		// `THROW 'leaked: ' + secret` throws the concatenation rather than
+		// ending the statement at the string.
+		ThrowStatement: ($) =>
+			prec.right(seq(alias($._kw_throw, $.Keyword), $._value)),
+		// RETURN carries its own FETCH clause. The value is spelled against
+		// `_value` rather than `_expression` so that `RETURN SELECT … FETCH a`
+		// gives the FETCH to the SELECT, which already has one, instead of
+		// leaving the two rules to fight over it.
 		ReturnStatement: ($) =>
-			seq(alias($._kw_return, $.Keyword), $._expression),
+			seq(
+				alias($._kw_return, $.Keyword),
+				choice($._statement, seq($._value, optional($.FetchClause))),
+			),
 
 		OptionStatement: ($) =>
 			seq(
@@ -291,7 +378,14 @@ export default grammar({
 				),
 			),
 
-		KillStatement: ($) => seq(alias($._kw_kill, $.Keyword), $.String),
+		// The live query is named by a UUID literal or a parameter holding
+		// one. 3.2.3 rejects every other literal — even a uuid-shaped plain
+		// strand is "Unexpected token `a strand`, expected a UUID or a
+		// parameter" — but any `String` is taken here so that the statement
+		// still parses and a consumer can say which literal was wrong,
+		// instead of the whole source collapsing into a syntax error.
+		KillStatement: ($) =>
+			seq(alias($._kw_kill, $.Keyword), choice($.String, $.VariableName)),
 
 		// USE
 		UseStatement: ($) =>
@@ -322,8 +416,13 @@ export default grammar({
 				alias($._kw_show, $.Keyword),
 				alias($._kw_changes, $.Keyword),
 				alias($._kw_for, $.Keyword),
-				alias($._kw_table, $.Keyword),
-				$.Ident,
+				// One table, or every table in the database. The table is a
+				// name and only a name: 3.2.3 parse-errors
+				// `SHOW CHANGES FOR TABLE $t`.
+				choice(
+					seq(alias($._kw_table, $.Keyword), $.Ident),
+					$._dbKeyword,
+				),
 				optional(
 					seq(
 						alias($._kw_since, $.Keyword),
@@ -387,26 +486,32 @@ export default grammar({
 				alias($._kw_for, $.Keyword),
 				choice(
 					alias($._kw_root, $.Keyword),
+					// `KV` is the key-value store itself — the level above a
+					// namespace.
+					alias($._kw_kv, $.Keyword),
 					$._nsKeyword,
 					$._dbKeyword,
-					seq(alias($._kw_sc, $.Keyword), $.Ident),
-					seq(alias($._kw_scope, $.Keyword), $.Ident),
-					seq(alias($._kw_tb, $.Keyword), $.Ident),
-					seq(alias($._kw_table, $.Keyword), $.Ident),
+					seq(alias($._kw_sc, $.Keyword), $._value),
+					seq(alias($._kw_scope, $.Keyword), $._value),
+					seq(alias($._kw_tb, $.Keyword), $._value),
+					seq(alias($._kw_table, $.Keyword), $._value),
 					// INFO FOR USER falls back to the session's level when the
 					// ON clause is left off.
 					seq(
 						alias($._kw_user, $.Keyword),
-						$.Ident,
+						$._value,
 						optional($.OnRootNsDbClause),
 					),
 					seq(
 						alias($._kw_index, $.Keyword),
-						$.Ident,
+						$._value,
 						$.OnTableClause,
 					),
 				),
 				optional(alias($._kw_structure, $.Keyword)),
+				// A temporal read: `INFO FOR DB VERSION d'…'` reports the
+				// schema as it stood at that point.
+				optional($.VersionClause),
 			),
 
 		// LET
@@ -434,14 +539,11 @@ export default grammar({
 				alias($._kw_for, $.Keyword),
 				$.VariableName,
 				alias($._kw_in, $.Keyword),
-				choice(
-					$.Array,
-					$.VariableName,
-					$.Range,
-					$.SubQuery,
-					$._subqueryStatement,
-					$.Block,
-				),
+				// Any expression, not just a literal collection: the engine
+				// evaluates it and complains at run time if the result is not
+				// iterable, so `FOR $x IN 42 {…}` and
+				// `FOR $x IN (SELECT …) * 2 {…}` both parse.
+				choice($._value, $._subqueryStatement),
 				$.Block,
 			),
 
@@ -451,11 +553,11 @@ export default grammar({
 		// A branch body is a value, a THROW or a RETURN, each optionally
 		// followed by a `;`. `_value` already covers Block and SubQuery, so
 		// spelling those out again would make one tree reachable two ways.
+		// A branch body is a value — which now covers IF, THROW and LET — a
+		// RETURN, or a bare data statement: 3.2.3 runs
+		// `IF $c THEN UPSERT p SET x = 1 RETURN x ELSE … END` unparenthesised.
 		_ifBranchBody: ($) =>
-			seq(
-				choice($._value, $.ThrowStatement, $.ReturnStatement),
-				optional(';'),
-			),
+			seq(choice($._value, $._nonSelectSubqueryStatement), optional(';')),
 		Legacy: ($) =>
 			seq(
 				$._value,
@@ -499,27 +601,271 @@ export default grammar({
 					csep($._inclusivePredicate),
 				),
 				alias($._kw_from, $.Keyword),
-				csep(choice($.Ident, $.RecordId)),
+				csep(choice($.Ident, $.RecordId, $.VariableName)),
 				optional($.WhereClause),
 				optional($.FetchClause),
 			),
 
 		// ALTER
+		// ALTER's guard is `IF EXISTS`, not `IF NOT EXISTS`, and it takes no
+		// view clause: 3.2.3 parse-errors on `ALTER TABLE IF NOT EXISTS t`
+		// and on `ALTER TABLE t AS SELECT …`, both of which `DEFINE TABLE`
+		// accepts.
+		//
+		// `DROP` is a different word here than in `DEFINE TABLE`, where it is
+		// a flag. On ALTER it *unsets* a clause and must name which one:
+		// `ALTER TABLE t DROP` answers "Unexpected token `;`, expected
+		// `COMMENT` or `CHANGEFEED`".
 		AlterStatement: ($) =>
 			seq(
 				alias($._kw_alter, $.Keyword),
-				alias($._kw_table, $.Keyword),
-				optional($.IfNotExistsClause),
-				$._value,
-				repeat(
+				choice(
+					seq(
+						alias($._kw_table, $.Keyword),
+						optional($.IfExistsClause),
+						$._value,
+						repeat(
+							choice(
+								alias($._kw_schemafull, $.Keyword),
+								alias($._kw_schemaless, $.Keyword),
+								$.TableTypeClause,
+								$.ChangefeedClause,
+								$.PermissionsForClause,
+								$.CommentClause,
+								$.CompactClause,
+								dropOf($, 'comment', 'changefeed'),
+							),
+						),
+					),
+					// ALTER INDEX names the table the index is on and needs at
+					// least one change: bare `ALTER INDEX i ON t` is a parse
+					// error in 3.2.3.
+					seq(
+						alias($._kw_index, $.Keyword),
+						optional($.IfExistsClause),
+						$._value,
+						$.OnTableClause,
+						repeat1(
+							choice(
+								$.PrepareClause,
+								$.CommentClause,
+								dropOf($, 'comment'),
+							),
+						),
+					),
+					seq(
+						alias($._kw_field, $.Keyword),
+						optional($.IfExistsClause),
+						$._fieldName,
+						$.OnTableClause,
+						repeat(
+							choice(
+								$.TypeClause,
+								$.DefaultClause,
+								$.ReadonlyClause,
+								$.ValueClause,
+								$.AssertClause,
+								$.PermissionsForClause,
+								$.CommentClause,
+								$.ReferenceClause,
+								$.ComputedClause,
+								alias($._kw_flexible, $.Keyword),
+								dropOf(
+									$,
+									'type',
+									'readonly',
+									'value',
+									'assert',
+									'default',
+									'comment',
+									'reference',
+									'flexible',
+								),
+							),
+						),
+					),
+					seq(
+						alias($._kw_event, $.Keyword),
+						optional($.IfExistsClause),
+						$._value,
+						$.OnTableClause,
+						repeat(
+							choice(
+								$.WhenClause,
+								$.ThenClause,
+								$.AsyncClause,
+								$.CommentClause,
+								dropOf($, 'when', 'then', 'comment', 'async'),
+							),
+						),
+					),
+					seq(
+						alias($._kw_access, $.Keyword),
+						optional($.IfExistsClause),
+						$._value,
+						$.OnRootNsDbClause,
+						repeat(
+							choice(
+								$.DurationClause,
+								$.CommentClause,
+								dropOf($, 'comment'),
+							),
+						),
+					),
+					seq(
+						alias($._kw_user, $.Keyword),
+						optional($.IfExistsClause),
+						$._value,
+						$.OnRootNsDbClause,
+						repeat(
+							choice(
+								$.PasswordClause,
+								$.RolesClause,
+								$.DurationClause,
+								$.CommentClause,
+								dropOf($, 'comment'),
+							),
+						),
+					),
+					seq(
+						alias($._kw_analyzer, $.Keyword),
+						optional($.IfExistsClause),
+						$._value,
+						repeat(
+							choice(
+								$.TokenizersClause,
+								$.FiltersClause,
+								$.FunctionClause,
+								$.CommentClause,
+								dropOf(
+									$,
+									'tokenizers',
+									'filters',
+									'function',
+									'comment',
+								),
+							),
+						),
+					),
+					seq(
+						alias($._kw_param, $.Keyword),
+						optional($.IfExistsClause),
+						$.VariableName,
+						repeat(
+							choice(
+								seq(alias($._kw_value, $.Keyword), $._value),
+								$.PermissionsBasicClause,
+								$.CommentClause,
+								dropOf($, 'comment'),
+							),
+						),
+					),
+					seq(
+						alias($._kw_function, $.Keyword),
+						optional($.IfExistsClause),
+						$.FunctionName,
+						// The signature and the body come together or not at
+						// all: 3.2.3 parse-errors on `ALTER FUNCTION fn::f
+						// { … }` (a body with no parameter list) and on
+						// `ALTER FUNCTION fn::f()` (a list with no body).
+						optional(
+							seq(
+								'(',
+								optional(
+									csepTrail(
+										alias(
+											$._unionParamDefinition,
+											$.ParamDefinition,
+										),
+									),
+								),
+								')',
+								optional(seq($.LookupRight, $._type)),
+								$.Block,
+							),
+						),
+						repeat(
+							choice(
+								$.PermissionsBasicClause,
+								$.CommentClause,
+								dropOf($, 'comment'),
+							),
+						),
+					),
+					seq(
+						alias($._kw_api, $.Keyword),
+						optional($.IfExistsClause),
+						$._value,
+						optional($.ApiOptions),
+						repeat(
+							choice(
+								$._apiForClause,
+								$.CommentClause,
+								dropOf($, 'comment'),
+							),
+						),
+					),
+					// SEQUENCE takes only TIMEOUT on ALTER: BATCH and START
+					// are parse errors there, though DEFINE takes both.
+					seq(
+						alias($._kw_sequence, $.Keyword),
+						optional($.IfExistsClause),
+						$._value,
+						repeat($.TimeoutClause),
+					),
+					seq(
+						alias($._kw_config, $.Keyword),
+						optional($.IfExistsClause),
+						$._configOptions,
+					),
+					// COMPACT and the global query timeout: the only ALTERs
+					// that name no object.
+					seq(
+						alias($._kw_system, $.Keyword),
+						choice(
+							$.CompactClause,
+							seq(
+								alias($._kw_query_timeout, $.Keyword),
+								$._value,
+							),
+							dropOf($, 'query_timeout'),
+						),
+					),
+					seq($._nsKeyword, $.CompactClause),
+					seq($._dbKeyword, $.CompactClause),
+				),
+			),
+
+		CompactClause: ($) => alias($._kw_compact, $.Keyword),
+
+		// A field path, or a parameter holding one: 3.2.3 runs
+		// `DEFINE FIELD $name ON $table`.
+		_fieldName: ($) => choice($.Idiom, $.VariableName),
+
+		// Hidden on purpose: its members inline into whichever statement uses
+		// it, so `DEFINE API` keeps exactly the tree it had before ALTER
+		// started sharing the rule.
+		_apiForClause: ($) =>
+			seq(
+				alias($._kw_for, $.Keyword),
+				choice(alias($._kw_any, $.Keyword), csep($.HttpMethod)),
+				optional($.ApiOptions),
+				// The handler is optional: a group may carry only its
+				// permissions or middleware, or drop the handler it had.
+				optional(
 					choice(
-						alias($._kw_drop, $.Keyword),
-						alias($._kw_schemafull, $.Keyword),
-						alias($._kw_schemaless, $.Keyword),
-						$.PermissionsForClause,
-						$.CommentClause,
+						seq(alias($._kw_then, $.Keyword), $.Block),
+						dropOf($, 'then'),
 					),
 				),
+			),
+
+		// `PREPARE` alone reaches the executor; only `REMOVE` follows it —
+		// 3.2.3 parse-errors on `PREPARE REBUILD`.
+		PrepareClause: ($) =>
+			seq(
+				alias($._kw_prepare, $.Keyword),
+				optional(alias($._kw_remove, $.Keyword)),
 			),
 
 		// REMOVE
@@ -566,18 +912,14 @@ export default grammar({
 						choice(
 							alias($._kw_graphql, $.Keyword),
 							alias($._kw_api, $.Keyword),
+							alias($._kw_default, $.Keyword),
 						),
 					),
 					seq(
 						alias($._kw_user, $.Keyword),
 						optional($.IfExistsClause),
 						$._value,
-						alias($._kw_on, $.Keyword),
-						choice(
-							alias($._kw_root, $.Keyword),
-							alias($._kw_namespace, $.Keyword),
-							alias($._kw_database, $.Keyword),
-						),
+						$.OnRootNsDbClause,
 					),
 					seq(
 						alias($._kw_token, $.Keyword),
@@ -585,8 +927,8 @@ export default grammar({
 						$._value,
 						alias($._kw_on, $.Keyword),
 						choice(
-							alias($._kw_namespace, $.Keyword),
-							alias($._kw_database, $.Keyword),
+							$._nsKeyword,
+							$._dbKeyword,
 							alias($._kw_scope, $.Keyword),
 						),
 					),
@@ -617,6 +959,9 @@ export default grammar({
 						alias($._kw_function, $.Keyword),
 						optional($.IfExistsClause),
 						$.FunctionName,
+						// The argument list may be written out, and is always
+						// empty: `REMOVE FUNCTION fn::greet()`.
+						optional(seq('(', ')')),
 					),
 					seq(
 						alias($._kw_param, $.Keyword),
@@ -724,7 +1069,14 @@ export default grammar({
 				optional(choice($.IfNotExistsClause, $.OverwriteClause)),
 				$._value,
 				$.OnTableClause,
-				repeat(choice($.WhenClause, $.ThenClause, $.CommentClause)),
+				repeat(
+					choice(
+						$.WhenClause,
+						$.ThenClause,
+						$.AsyncClause,
+						$.CommentClause,
+					),
+				),
 			),
 
 		_defineDatabaseOptions: ($) =>
@@ -738,7 +1090,7 @@ export default grammar({
 		_defineFieldOptions: ($) =>
 			seq(
 				optional(choice($.IfNotExistsClause, $.OverwriteClause)),
-				$.Idiom,
+				$._fieldName,
 				$.OnTableClause,
 				repeat(
 					choice(
@@ -802,8 +1154,9 @@ export default grammar({
 			seq(
 				optional(choice($.IfNotExistsClause, $.OverwriteClause)),
 				$.VariableName,
-				alias($._kw_value, $.Keyword),
-				$._value,
+				// VALUE is optional: `DEFINE PARAM $p PERMISSIONS NONE` is
+				// accepted by 3.2.3.
+				optional(seq(alias($._kw_value, $.Keyword), $._value)),
 				repeat(choice($.PermissionsBasicClause, $.CommentClause)),
 			),
 
@@ -842,12 +1195,27 @@ export default grammar({
 		_defineConfigOptions: ($) =>
 			seq(
 				optional(choice($.IfNotExistsClause, $.OverwriteClause)),
-				choice(
-					seq(
-						alias($._kw_graphql, $.Keyword),
-						$._defineConfigGraphqlOptions,
+				$._configOptions,
+			),
+		// The config subject and its settings, shared by DEFINE and ALTER.
+		// Each subject's options are optional — `DEFINE CONFIG GRAPHQL;` and
+		// `DEFINE CONFIG API;` both reach the executor.
+		_configOptions: ($) =>
+			choice(
+				seq(
+					alias($._kw_graphql, $.Keyword),
+					optional($._defineConfigGraphqlOptions),
+				),
+				seq(alias($._kw_api, $.Keyword), optional($.ApiOptions)),
+				// The DEFAULT config names where an unqualified query lands.
+				seq(
+					alias($._kw_default, $.Keyword),
+					repeat1(
+						choice(
+							seq($._nsKeyword, $._value),
+							seq($._dbKeyword, $._value),
+						),
 					),
-					seq(alias($._kw_api, $.Keyword), $.ApiOptions),
 				),
 			),
 		_defineConfigGraphqlOptions: ($) =>
@@ -866,6 +1234,30 @@ export default grammar({
 					),
 					seq(
 						alias($._kw_functions, $.Keyword),
+						choice(
+							alias($._kw_none, $.None),
+							alias($._kw_auto, $.Keyword),
+							seq(
+								alias($._kw_include, $.Keyword),
+								csep($.FunctionName),
+							),
+							seq(
+								alias($._kw_exclude, $.Keyword),
+								csep($.FunctionName),
+							),
+						),
+					),
+					// The query limits. Each takes a number or NONE.
+					seq(
+						alias($._kw_depth, $.Keyword),
+						choice($.Number, alias($._kw_none, $.None)),
+					),
+					seq(
+						alias($._kw_complexity, $.Keyword),
+						choice($.Number, alias($._kw_none, $.None)),
+					),
+					seq(
+						alias($._kw_introspection, $.Keyword),
 						choice(
 							alias($._kw_none, $.None),
 							alias($._kw_auto, $.Keyword),
@@ -914,20 +1306,15 @@ export default grammar({
 			),
 		RolesClause: ($) => seq(alias($._kw_roles, $.Keyword), csep($.Ident)),
 
+		// The path is a value (`DEFINE API $path …` runs on 3.2.3), the method
+		// groups are optional, and the statement carries a COMMENT of its own.
+		// `_apiForClause` is shared with ALTER.
 		_defineApiOptions: ($) =>
 			seq(
 				optional(choice($.IfNotExistsClause, $.OverwriteClause)),
-				$.String,
+				$._value,
 				optional($.ApiOptions),
-				repeat1(
-					seq(
-						alias($._kw_for, $.Keyword),
-						choice(alias($._kw_any, $.Keyword), csep($.HttpMethod)),
-						optional($.ApiOptions),
-						alias($._kw_then, $.Keyword),
-						$.Block,
-					),
-				),
+				repeat(choice($._apiForClause, $.CommentClause)),
 			),
 
 		ApiOptions: ($) =>
@@ -958,6 +1345,9 @@ export default grammar({
 						$.FunctionCall,
 						$.RecordId,
 						$.RangeRecordId,
+						// `CREATE r'person:100'` — the r-prefixed string is a
+						// record id literal.
+						$.String,
 					),
 				),
 				optional(choice($.ContentClause, $.SetClause, $.UnsetClause)),
@@ -1021,13 +1411,30 @@ export default grammar({
 		InsertStatement: ($) =>
 			seq(
 				alias($._kw_insert, $.Keyword),
-				optional(alias($._kw_ignore, $.Keyword)),
+				// The engine eats RELATION before IGNORE and only in that
+				// order: 3.2.3 runs `INSERT RELATION IGNORE INTO likes {…}`
+				// and answers `INSERT IGNORE RELATION INTO likes {…}` with
+				// "Unexpected token `INTO`, expected Eof".
 				optional(alias($._kw_relation, $.Keyword)),
-				optional(seq(alias($._kw_into, $.Keyword), $.Ident)),
+				optional(alias($._kw_ignore, $.Keyword)),
+				optional(
+					seq(
+						alias($._kw_into, $.Keyword),
+						choice($.Ident, $.VariableName),
+					),
+				),
 				choice(
 					$.Object,
 					$.VariableName,
 					$.BulkInsert,
+					// The rows can come from a subquery: `INSERT INTO t
+					// (SELECT … FROM u)`. Spelled as the statement rather than
+					// `SubQuery` so it stays distinct from the parenthesised
+					// column list below, which a general value would leave
+					// ambiguous until the token after the closing paren. The
+					// alias sits on a named rule: aliasing a bare `seq` would
+					// rename each of its members instead of wrapping them.
+					alias($._insertSubquery, $.SubQuery),
 					seq(
 						'(',
 						csep($.Ident),
@@ -1047,7 +1454,8 @@ export default grammar({
 				),
 				optional($.ReturnClause),
 			),
-		BulkInsert: ($) => seq('[', csep($.Object), ']'),
+		_insertSubquery: ($) => seq('(', $._subqueryStatement, ')'),
+		BulkInsert: ($) => seq('[', csepTrail($.Object), ']'),
 
 		// UPDATE
 		UpdateStatement: ($) =>
@@ -1090,6 +1498,8 @@ export default grammar({
 			),
 
 		// RELATE
+		// Any end of the edge may be produced by a subquery:
+		// `RELATE [1,2]->a:b->(CREATE foo)`.
 		_relateSubject: ($) =>
 			choice(
 				$.Array,
@@ -1097,16 +1507,28 @@ export default grammar({
 				$.FunctionCall,
 				$.VariableName,
 				$.RecordId,
+				$.SubQuery,
 			),
 		RelateStatement: ($) =>
 			seq(
 				alias($._kw_relate, $.Keyword),
+				// `RELATE OR UPDATE` updates an edge that already exists
+				// instead of failing. `OR CREATE` is a parse error.
+				optional(
+					seq(
+						alias($._kw_or, $.Keyword),
+						alias($._kw_update, $.Keyword),
+					),
+				),
 				optional(alias($._kw_only, $.Keyword)),
 				$._relateSubject,
 				choice($.LookupRight, $.LookupLeft),
 				$._relateSubject,
 				choice($.LookupRight, $.LookupLeft),
 				$._relateSubject,
+				// UNIQUE belongs to the edge, so it sits with the subject and
+				// ahead of the data: 3.2.3 rejects `SET x = 1 UNIQUE`.
+				optional($.UniqueClause),
 				optional(choice($.ContentClause, $.SetClause)),
 				optional($.ReturnClause),
 				optional($.TimeoutClause),
@@ -1149,7 +1571,9 @@ export default grammar({
 			seq(alias($._kw_set, $.Keyword), csep($.FieldAssignment)),
 		MergeClause: ($) => seq(alias($._kw_merge, $.Keyword), $._value),
 		PatchClause: ($) => seq(alias($._kw_patch, $.Keyword), $.Array),
-		ReplaceClause: ($) => seq(alias($._kw_replace, $.Keyword), $.Object),
+		// The replacement is a value, not only an object literal: the engine
+		// evaluates it and complains at run time if it is not an object.
+		ReplaceClause: ($) => seq(alias($._kw_replace, $.Keyword), $._value),
 		// UNSET removes fields by name (`UNSET a, b`), so it takes a field
 		// list — the same shape as OMIT — rather than assignments.
 		UnsetClause: ($) =>
@@ -1188,15 +1612,20 @@ export default grammar({
 				),
 			),
 		SequenceBatchClause: ($) =>
-			seq(alias($._kw_batch, $.Keyword), $.Number),
+			seq(alias($._kw_batch, $.Keyword), $._value),
 		SequenceStartClause: ($) =>
-			seq(alias($._kw_start, $.Keyword), $.Number),
+			seq(alias($._kw_start, $.Keyword), $._value),
 
 		WithClause: ($) =>
 			seq(
 				alias($._kw_with, $.Keyword),
 				choice(
+					// The engine spells it either way.
 					alias($._kw_noindex, $.Keyword),
+					seq(
+						alias($._kw_no, $.Keyword),
+						alias($._kw_index, $.Keyword),
+					),
 					seq(alias($._kw_index, $.Keyword), csep($.Ident)),
 				),
 			),
@@ -1205,7 +1634,8 @@ export default grammar({
 			seq(
 				alias($._kw_split, $.Keyword),
 				optional(alias($._kw_on, $.Keyword)),
-				$.Idiom,
+				// More than one field may be split at once.
+				csep($.Idiom),
 			),
 
 		GroupClause: ($) =>
@@ -1223,9 +1653,15 @@ export default grammar({
 				optional(alias($._kw_by, $.Keyword)),
 				choice(csep($.Order), $.FunctionCall),
 			),
+		// `count` is a field name here as much as anywhere else — 3.2.3 accepts
+		// `ORDER BY count DESC` — but the clause's own `ORDER BY RAND()`
+		// alternative makes `count` a live token in this state, so `Idiom`
+		// alone cannot reach it. `rand` is NOT admitted: the engine really
+		// does reserve that one here, answering `ORDER BY rand` with
+		// "Unexpected token `;`, expected (".
 		Order: ($) =>
 			seq(
-				$.Idiom,
+				choice($.Idiom, alias($._countIdiom, $.Idiom)),
 				optional(alias($._kw_collate, $.Keyword)),
 				optional(alias($._kw_numeric, $.Keyword)),
 				optional(
@@ -1256,8 +1692,17 @@ export default grammar({
 				choice($.Number, $.VariableName),
 			),
 
-		FetchClause: ($) => seq(alias($._kw_fetch, $.Keyword), csep($.Idiom)),
-		TimeoutClause: ($) => seq(alias($._kw_timeout, $.Keyword), $.Duration),
+		// `FETCH type::field('purchases')` names the field dynamically.
+		FetchClause: ($) =>
+			seq(
+				alias($._kw_fetch, $.Keyword),
+				csep(choice($.Idiom, $.FunctionCall, $.VariableName)),
+			),
+		// Each of these three takes a whole value, not just a literal: the
+		// engine evaluates it. `TIMEOUT $timeout`, `VERSION $ts` and
+		// `COMMENT $comment` are what SurrealDB's parameterized tests write,
+		// and a literal still yields exactly the tree it did before.
+		TimeoutClause: ($) => seq(alias($._kw_timeout, $.Keyword), $._value),
 		ParallelClause: ($) => alias($._kw_parallel, $.Keyword),
 		TempfilesClause: ($) => alias($._kw_tempfiles, $.Keyword),
 		ExplainClause: ($) =>
@@ -1265,7 +1710,7 @@ export default grammar({
 				alias($._kw_explain, $.Keyword),
 				optional(alias($._kw_full, $.Literal)),
 			),
-		VersionClause: ($) => seq(alias($._kw_version, $.Keyword), $.String),
+		VersionClause: ($) => seq(alias($._kw_version, $.Keyword), $._value),
 
 		ReturnClause: ($) =>
 			seq(
@@ -1317,7 +1762,13 @@ export default grammar({
 					seq(
 						alias($._kw_record, $.Keyword),
 						repeat(choice($.SignupClause, $.SigninClause)),
+						// `WITH REFRESH` sits on either side of `WITH JWT`;
+						// the engine takes both orders. It is a RECORD-only
+						// clause: `TYPE BEARER FOR USER WITH REFRESH` is a
+						// parse error in 3.2.3.
+						optional($.RefreshClause),
 						optional($.WithJwtClause),
+						optional($.RefreshClause),
 					),
 					// TYPE BEARER FOR USER|RECORD, whose grants are what
 					// `DURATION FOR GRANT` and `ACCESS … GRANT` act on.
@@ -1339,6 +1790,9 @@ export default grammar({
 				alias($._kw_jwt, $.Keyword),
 				$.JwtClause,
 			),
+
+		RefreshClause: ($) =>
+			seq(alias($._kw_with, $.Keyword), alias($._kw_refresh, $.Keyword)),
 
 		JwtClause: ($) =>
 			seq(
@@ -1369,21 +1823,27 @@ export default grammar({
 
 		_accessKeyValue: ($) => choice($.String, $.VariableName),
 
-		SignupClause: ($) =>
-			seq(alias($._kw_signup, $.Keyword), choice($.SubQuery, $.Block)),
-		SigninClause: ($) =>
-			seq(alias($._kw_signin, $.Keyword), choice($.SubQuery, $.Block)),
+		// Each takes a value, which already covers the SubQuery and Block
+		// spellings: `SIGNUP true` and `AUTHENTICATE true` both reach the
+		// executor in 3.2.3.
+		SignupClause: ($) => seq(alias($._kw_signup, $.Keyword), $._value),
+		SigninClause: ($) => seq(alias($._kw_signin, $.Keyword), $._value),
 		AuthenticateClause: ($) =>
-			seq(
-				alias($._kw_authenticate, $.Keyword),
-				choice($.SubQuery, $.Block),
-			),
+			seq(alias($._kw_authenticate, $.Keyword), $._value),
 		SessionClause: ($) => seq(alias($._kw_session, $.Keyword), $.Duration),
 
 		// The engine wants the FOR target on every entry, and takes NONE in
 		// place of a duration to mean "never expires".
 		DurationClause: ($) =>
-			seq(alias($._kw_duration, $.Keyword), csep($.DurationValue)),
+			seq(
+				alias($._kw_duration, $.Keyword),
+				// The entries run with or without commas between them, the
+				// same way permission groups do.
+				seq(
+					$.DurationValue,
+					repeat(seq(optional(','), $.DurationValue)),
+				),
+			),
 		DurationValue: ($) =>
 			seq(
 				alias($._kw_for, $.Keyword),
@@ -1392,7 +1852,8 @@ export default grammar({
 					alias($._kw_session, $.Keyword),
 					alias($._kw_grant, $.Keyword),
 				),
-				choice($.Duration, alias($._kw_none, $.None)),
+				// A duration, NONE (never expires), or a parameter holding one.
+				choice($.Duration, alias($._kw_none, $.None), $.VariableName),
 			),
 
 		TokenTypeClause: ($) => seq(alias($._kw_type, $.Keyword), $.TokenType),
@@ -1403,7 +1864,9 @@ export default grammar({
 					alias($._kw_fields, $.Keyword),
 					alias($._kw_columns, $.Keyword),
 				),
-				csep($.Idiom),
+				// `type::field($f)` and `type::fields([$a, $b])` name the
+				// fields dynamically.
+				csep(choice($.Idiom, $.FunctionCall)),
 			),
 
 		// The index kinds. SurrealDB 3 reads `UNIQUE`, `COUNT`, `FULLTEXT`,
@@ -1628,15 +2091,46 @@ export default grammar({
 			),
 
 		ChangefeedClause: ($) =>
-			seq(alias($._kw_changefeed, $.Keyword), $.Duration),
+			seq(
+				alias($._kw_changefeed, $.Keyword),
+				$.Duration,
+				optional(
+					seq(
+						alias($._kw_include, $.Keyword),
+						alias($._kw_original, $.Keyword),
+					),
+				),
+			),
 
 		WhenClause: ($) => seq(alias($._kw_when, $.Keyword), $._value),
+		// THEN takes a comma-separated list of values, and `_value` already
+		// covers the SubQuery and Block spellings. A bare `RETURN`/`THROW`
+		// body is admitted by name.
+		//
+		// The body cannot be an arbitrary statement, although 3.2.3 parses
+		// one: DEFINE and ALTER own a COMMENT of their own, so a trailing
+		// COMMENT would belong either to them or to the event, and admitting
+		// them costs 14 GLR conflicts and doubles the parser table. Write
+		// those bodies as a block. Each body is a named rule under the alias:
+		// aliasing a bare `seq` renames its members instead of wrapping them.
 		ThenClause: ($) =>
 			seq(
-				optional(alias($._kw_async, $.Keyword)),
 				alias($._kw_then, $.Keyword),
-				csep(choice($.SubQuery, $.Block)),
+				choice(csep($._value), alias($._thenReturn, $.ReturnStatement)),
 			),
+		_thenReturn: ($) => seq(alias($._kw_return, $.Keyword), $._value),
+
+		// RETRY and MAXDEPTH exist only behind ASYNC — 3.2.3 parse-errors on
+		// `DEFINE EVENT … RETRY 2 WHEN …` — but may follow it in either
+		// order. ASYNC itself is position-free among the event's clauses.
+		AsyncClause: ($) =>
+			seq(
+				alias($._kw_async, $.Keyword),
+				repeat(choice($.EventRetryClause, $.EventMaxDepthClause)),
+			),
+		EventRetryClause: ($) => seq(alias($._kw_retry, $.Keyword), $.Number),
+		EventMaxDepthClause: ($) =>
+			seq(alias($._kw_maxdepth, $.Keyword), $.Number),
 
 		TokenizersClause: ($) =>
 			seq(alias($._kw_tokenizers, $.Keyword), csep($.AnalyzerTokenizer)),
@@ -1687,7 +2181,7 @@ export default grammar({
 							alias($._kw_cascade, $.Keyword),
 							alias($._kw_ignore, $.Keyword),
 							alias($._kw_unset, $.Keyword),
-							seq(alias($._kw_then, $.Keyword), $.Block),
+							seq(alias($._kw_then, $.Keyword), $._value),
 						),
 					),
 				),
@@ -1717,7 +2211,12 @@ export default grammar({
 				choice(
 					alias($._kw_none, $.None),
 					alias($._kw_full, $.Literal),
-					repeat1($.PermissionGroup),
+					// The engine takes the groups with or without commas
+					// between them: `FOR select NONE, FOR create FULL`.
+					seq(
+						$.PermissionGroup,
+						repeat(seq(optional(','), $.PermissionGroup)),
+					),
 				),
 			),
 
@@ -1733,7 +2232,7 @@ export default grammar({
 
 		MiddlewareClause: ($) =>
 			seq(alias($._kw_middleware, $.Keyword), csep($.FunctionCall)),
-		CommentClause: ($) => seq(alias($._kw_comment, $.Keyword), $.String),
+		CommentClause: ($) => seq(alias($._kw_comment, $.Keyword), $._value),
 		BackendClause: ($) => seq(alias($._kw_backend, $.Keyword), $._value),
 
 		AnalyzerFilters: ($) =>
@@ -1742,7 +2241,8 @@ export default grammar({
 				optional(
 					seq(
 						'(',
-						choice(seq($.Number, ',', $.Number), $.Ident),
+						// `mapper('…/lemmatization-en.txt')` names a file.
+						choice(seq($.Number, ',', $.Number), $.Ident, $.String),
 						')',
 					),
 				),
@@ -1752,13 +2252,34 @@ export default grammar({
 		// Values
 		// ================================================================
 
+		// IF is an expression in SurrealQL, not only a statement: it is legal
+		// unparenthesised in a projection, a WHERE, an array element, an
+		// object value, a `SET` right-hand side, a `COMPUTED`/`VALUE`/`ASSERT`
+		// clause. It sits here rather than in `_baseValue` so it does not also
+		// become a path or lookup base, which the engine does not accept.
 		_value: ($) =>
 			choice(
 				$.Path,
 				$.BinaryExpression,
 				$.Range,
 				$.PrefixExpression,
+				$.TypeCast,
 				$._baseValue,
+				$.IfElseStatement,
+				// THROW is an expression too: the engine evaluates
+				// `WHERE THROW 'x'`, `SET x = THROW 'x'` and
+				// `{ x: THROW 'x' }`. Like IF it sits here rather than in
+				// `_baseValue` so it cannot become a path base, and it comes
+				// out of the statement list so one tree is never reachable
+				// two ways.
+				//
+				// LET is an expression to the engine as well
+				// (`RETURN [LET $x = 1]` runs), but it is not admitted here:
+				// its own `=` and its statement right-hand side make every
+				// `LET $x = <stmt>` ambiguous with a comparison, and the two
+				// corpus inputs are not worth spreading `prec.right` across
+				// every data statement.
+				$.ThrowStatement,
 			),
 
 		// `!`, and the arithmetic signs. A sign in front of a literal number
@@ -1777,7 +2298,8 @@ export default grammar({
 					$._prefixOperand,
 				),
 			),
-		_prefixOperand: ($) => choice($.PrefixExpression, $.Path, $._baseValue),
+		_prefixOperand: ($) =>
+			choice($.PrefixExpression, $.Path, $.TypeCast, $._baseValue),
 
 		_baseValue: ($) =>
 			choice(
@@ -1790,8 +2312,34 @@ export default grammar({
 				$.SubQuery,
 				$.Block,
 				$.Closure,
-				$.TypeCast,
 				$.Ident,
+				// Non-reserved clause keywords are valid identifiers wherever
+				// a value is expected — `WHERE order = $x`, `SELECT count`.
+				alias($._nonReservedIdent, $.Ident),
+			),
+
+		_nonReservedIdent: ($) =>
+			choice(
+				$._kw_order,
+				$._kw_start,
+				$._kw_limit,
+				$._kw_group,
+				$._kw_key,
+				// `count` is a function name only when it is called.
+				// `SELECT field1, count() FROM t GROUP field1` names its
+				// aggregate column `count`, and reading it back —
+				// `SELECT VALUE [field1, count] FROM (…)` — is what
+				// SurrealDB's own tests do. The precedence settles `count <`:
+				// it is the field compared (`count < 5`), never the start of
+				// a versioned call — versions apply to `fn::` functions, and
+				// `count` is a built-in.
+				prec(1, $._kw_count),
+				// `type` too: `tags[WHERE type = 'library']` is a field named
+				// `type`, and the engine reads it as one. It is a live token
+				// inside a WHERE because a `DEFINE FIELD`'s TYPE clause may
+				// follow a permission's WHERE, so without this the keyword
+				// wins the lex everywhere a WHERE value is parsed.
+				$._kw_type,
 			),
 
 		_computedValue: ($) =>
@@ -1828,7 +2376,15 @@ export default grammar({
 				seq($.Lookup, repeat($._pathElement)),
 			),
 		_pathElement: ($) =>
-			choice($.Lookup, $.Subscript, alias($._pathFilter, $.Filter)),
+			choice(
+				$.Lookup,
+				$.Subscript,
+				alias($._pathFilter, $.Filter),
+				// `...` flattens the array the path has reached. It was an
+				// idiom tail only, so `UNSET foo...` and `SELECT a...` — both
+				// of which reach the executor in 3.2.3 — were errors.
+				alias(choice('...', '…'), $.Flatten),
+			),
 		Subscript: ($) => seq('.', $._dotPart),
 		_dotPart: ($) =>
 			choice(
@@ -1842,26 +2398,29 @@ export default grammar({
 			),
 
 		_pathFilter: ($) =>
-			seq(
-				'[',
-				choice(
-					$.WhereClause,
-					// `[? value]` shorthand — wrap in WhereClause to match lezer's
-					// inline `WhereClause { "?" value }` rule.
-					alias($._questionWhere, $.WhereClause),
-					// `[*]` selects every element, `[$]` the last one.
-					alias('*', $.Any),
-					alias('$', $.Last),
-					$._expression,
-				),
-				']',
+			seq('[', choice(alias('*', $.Any), $._filterBody), ']'),
+		// The same bracket without the `[*]` wildcard, for idiom positions —
+		// see `_idiomTail`, which spells the wildcard itself.
+		_idiomFilter: ($) => seq('[', $._filterBody, ']'),
+		_filterBody: ($) =>
+			choice(
+				$.WhereClause,
+				// `[? value]` shorthand — wrap in WhereClause to match lezer's
+				// inline `WhereClause { "?" value }` rule.
+				alias($._questionWhere, $.WhereClause),
+				// `[$]` selects the last element.
+				alias('$', $.Last),
+				$._expression,
 			),
 		_questionWhere: ($) => seq('?', $._value),
 
+		// The edge may be named by a record id or a record-id range, not only
+		// by a table: `b:1->computed_edge:[6]..=[$num - 2]` and
+		// `a:1<~lookup:1..2` both reach the executor.
 		Lookup: ($) =>
 			seq(
 				choice($.LookupRight, $.LookupLeft, $.LookupBoth),
-				choice($.Ident, $.Any, $.LookupSelection),
+				choice($.Ident, $.RecordId, $.Any, $.LookupSelection),
 			),
 
 		LookupSelection: ($) =>
@@ -1884,28 +2443,45 @@ export default grammar({
 				),
 				')',
 			),
+		// `->(SELECT * FROM ONLY knows LIMIT 1)` unwraps the single edge.
 		GraphFieldSelection: ($) =>
 			seq(
 				alias($._kw_select, $.Keyword),
 				$.Fields,
 				alias($._kw_from, $.Keyword),
+				optional(alias($._kw_only, $.Keyword)),
 			),
-		GraphPredicate: ($) => choice($._value, $.Any),
+		// `FIELD <name>` names the referencing field to traverse, and binds to
+		// the predicate it follows rather than to the selection as a whole:
+		// `(message FIELD author, b FIELD c)` gives each table its own field.
+		// The name is an Ident and only an Ident -- no path, no param.
+		GraphPredicate: ($) =>
+			choice(seq($._value, optional($.GraphFieldClause)), $.Any),
+		GraphFieldClause: ($) => seq(alias($._kw_field, $.Keyword), $.Ident),
 
+		// The selection list is OPTIONAL: `id.{}` is valid SurrealQL and
+		// evaluates to the empty object (3.2.3: `SELECT VALUE id.{} FROM ONLY
+		// user:ada` -> `{}`). Requiring at least one entry made every such
+		// expression a parse error.
 		Destructure: ($) =>
 			seq(
 				$.BraceOpen,
-				csep(
-					choice(
-						seq(
-							$.Ident,
-							$.Colon,
-							choice(
-								seq($.Lookup, repeat($._pathElement)),
-								$._value,
+				optional(
+					csep(
+						choice(
+							seq(
+								$.Ident,
+								$.Colon,
+								choice(
+									seq($.Lookup, repeat($._pathElement)),
+									$._value,
+								),
+							),
+							seq(
+								choice($.Ident, $.Lookup),
+								repeat($._pathElement),
 							),
 						),
-						seq(choice($.Ident, $.Lookup), repeat($._pathElement)),
 					),
 				),
 				$.BraceClose,
@@ -1963,10 +2539,22 @@ export default grammar({
 		Idiom: ($) => seq($.Ident, repeat($._idiomTail)),
 		_idiomTail: ($) =>
 			choice(
-				seq('.', choice($.Ident, alias('*', $.Any))),
-				alias($._pathFilter, $.Filter),
-				alias('...', $.Flatten),
+				seq('.', choice($.Ident, $.IdiomFunction, alias('*', $.Any))),
+				// `items[*]` and `items.*` are the same field path — every
+				// element — so they get the same tree: a bare `Any`, not a
+				// `Filter` wrapping one. In a *value* position `a[*]` stays a
+				// `Filter`, because there the brackets really are the filter
+				// syntax and `[0]`, `[$]`, `[WHERE …]` sit beside it.
+				seq('[', alias('*', $.Any), ']'),
+				alias($._idiomFilter, $.Filter),
+				alias(choice('...', '…'), $.Flatten),
 			),
+		// An idiom rooted at `count`, for the positions where the bare keyword
+		// cannot lex as an `Ident` because a call is also on offer. Aliased to
+		// `Idiom`, so the shape — and every consumer — is the same as any
+		// other idiom's.
+		_countIdiom: ($) =>
+			seq(alias($._kw_count, $.Ident), repeat($._idiomTail)),
 
 		// Binary expression
 		//
@@ -2017,8 +2605,24 @@ export default grammar({
 				// `a IS NOT b` is one operator, never `a IS (NOT b)` — which
 				// matters now that `not` can also open a call.
 				prec(1, seq($._kw_is, $._kw_not)),
+				// The matches operator. `@@` is the bare form; the brackets may
+				// carry a reference number for `search::` highlighting, a
+				// boolean mode (`@AND@`, `@OR@`), or both (`@1,AND@`).
 				'@@',
-				seq('@', $.Number, '@'),
+				seq(
+					'@',
+					choice(
+						$.Number,
+						seq(
+							optional(seq($.Number, ',')),
+							choice(
+								alias($._kw_and, $.Keyword),
+								alias($._kw_or, $.Keyword),
+							),
+						),
+					),
+					'@',
+				),
 			),
 		// Relational family (BindingPower::Relation): ordering, membership,
 		// containment, geo, and the KNN operator.
@@ -2079,7 +2683,11 @@ export default grammar({
 			),
 
 		// Type cast
-		TypeCast: ($) => seq('<', $._type, '>', $._baseValue),
+		// The operand is a whole value, and the 'cast' precedence settles what
+		// that value reaches: a range, a path, a prefix operator or another
+		// cast is inside the cast (`<array> 1..5`, `<string> $x.y`,
+		// `<string> -$x`); a binary operator is outside it. Mirrors 3.2.3.
+		TypeCast: ($) => prec('cast', seq('<', $._type, '>', $._value)),
 
 		// Closure
 		Closure: ($) =>
@@ -2123,7 +2731,14 @@ export default grammar({
 			seq($.VariableName, optional(seq($.Colon, alias($._type, $.Type)))),
 
 		// Block / SubQuery
-		Block: ($) => seq($.BraceOpen, optional($._expressions), $.BraceClose),
+		// `{;}` and `{;;}` are empty blocks, on the same terms as a source:
+		// `{SELECT 1;;}` is a parse error.
+		Block: ($) =>
+			seq(
+				$.BraceOpen,
+				optional(choice($._expressions, $._onlySemicolons)),
+				$.BraceClose,
+			),
 
 		SubQuery: ($) => seq('(', $._expression, ')'),
 
@@ -2147,7 +2762,10 @@ export default grammar({
 					$._value,
 				),
 			),
-		ObjectKey: ($) => choice(alias($._rawident, $.KeyName), $.String),
+		// A numeric key is a key: `{ 1: 1 }` is an object with the key "1",
+		// and `'1' IN { 1: 1 }` is true.
+		ObjectKey: ($) =>
+			choice(alias($._rawident, $.KeyName), $.String, $.Number),
 
 		_objectSelectValue: ($) =>
 			seq(
@@ -2189,7 +2807,18 @@ export default grammar({
 		RecordIdIdent: ($) =>
 			choice($._numberident, $._tickIdent, $._bracketIdent),
 		_recordIdValue: ($) =>
-			choice($.RecordIdIdent, $.Array, $.Object, $.RecordIdString),
+			choice(
+				$.RecordIdIdent,
+				$.Array,
+				$.Object,
+				$.RecordIdString,
+				// A bound may be *signed*: `|test:-5..5|` and
+				// `|test:..=-9223372036854775806|` both generate. Only the
+				// signed form is admitted here — an unsigned one is already a
+				// `RecordIdIdent`, which is the tree every plain `person:1`
+				// has always produced.
+				alias($._signedNumber, $.Number),
+			),
 		// Lezer emits RecordIdString(String); we wrap the prefixed-string token
 		// in an aliased String node to match the same structure.
 		RecordIdString: ($) => alias($._prefixedString, $.String),
@@ -2230,11 +2859,19 @@ export default grammar({
 				),
 				seq($.RecordId, $.ArgumentList),
 				seq($.VariableName, $.ArgumentList),
+				// `(|$x| $x + 1)(41)` — a parenthesised value called in place
+				// (3.2.3 evaluates it to 42; `(1 + 2)(3)` parses and fails at
+				// run time with "'int' is not a function"). A block is called
+				// the same way: `{||2}()`.
+				seq($.SubQuery, $.ArgumentList),
+				seq($.Block, $.ArgumentList),
 			),
 		ArgumentList: ($) =>
 			seq(
 				'(',
-				optional(choice(csep($._value), $._subqueryStatement)),
+				// A trailing comma is allowed, as it is in an array and an
+				// object literal.
+				optional(choice(csepTrail($._value), $._subqueryStatement)),
 				')',
 			),
 		Version: ($) => seq('<', $.VersionNumber, '>'),
@@ -2248,7 +2885,7 @@ export default grammar({
 					4,
 					new RegExp(
 						`(?:${kw('math').source}::(?:${kwAlt(MATH_CONSTANTS)})` +
-							`|${kw('time').source}::${kw('EPOCH').source}` +
+							`|${kw('time').source}::(?:${kwAlt(TIME_CONSTANTS)})` +
 							`|${kw('duration').source}::${kw('MAX').source})`,
 					),
 				),
@@ -2312,14 +2949,16 @@ export default grammar({
 			seq(
 				choice($.Ident, alias($._pathAssignTarget, $.Idiom)),
 				alias($._assignmentOp, $.Operator),
-				choice($.IfElseStatement, $._value),
+				$._value,
 			),
 		// Any idiom tail makes a target a path, not just a dotted one: the
 		// engine takes `SET d[0] = 3`, `SET tags[*].seen = true` and
 		// `SET tags... = 1` as readily as `SET a.b = 1`. A single-segment
 		// target is still the bare `Ident` it has always been.
 		_pathAssignTarget: ($) => seq($.Ident, repeat1($._idiomTail)),
-		_assignmentOp: ($) => choice('=', '+=', '-='),
+		// `+?=` extends an array only where the value is missing. There is no
+		// `-?=`: 3.2.3 rejects it.
+		_assignmentOp: ($) => choice('=', '+=', '-=', '+?='),
 
 		// ----------------------------------------------------------------
 		// Fields & predicates
@@ -2330,10 +2969,19 @@ export default grammar({
 				seq(alias($._kw_value, $.Keyword), $.Predicate),
 				csep($._inclusivePredicate),
 			),
+		// The alias may be a path, not just a name: `SELECT modified AS b.c`
+		// nests the value under `b` in the output, and `ORDER BY b.c` then
+		// reads it back. A single-segment alias stays the bare `Ident` it has
+		// always been — only the dotted form wraps, exactly as a `SET` target
+		// does.
 		Predicate: ($) =>
 			choice(
 				$._value,
-				seq($._value, alias($._kw_as, $.Keyword), $.Ident),
+				seq(
+					$._value,
+					alias($._kw_as, $.Keyword),
+					choice($.Ident, alias($._pathAssignTarget, $.Idiom)),
+				),
 			),
 		_inclusivePredicate: ($) => choice(alias('*', $.Any), $.Predicate),
 
@@ -2426,11 +3074,8 @@ export default grammar({
 		// ordinary input is unchanged either way. `bench/` holds
 		// the inputs and the method — interleave the revisions and take the
 		// median, or measurement drift will invert the result.
-		Number: ($) =>
-			choice(
-				seq(choice('-', '+'), $._signedNumberBody),
-				$._unsignedNumber,
-			),
+		Number: ($) => choice($._signedNumber, $._unsignedNumber),
+		_signedNumber: ($) => seq(choice('-', '+'), $._signedNumberBody),
 		_unsignedNumber: ($) => choice($.Decimal, $.Float, $.Int),
 		_signedNumberBody: ($) =>
 			choice(
@@ -2558,8 +3203,11 @@ export default grammar({
 		Ident: ($) => $._idName,
 
 		_rawident: ($) => token(prec(-1, /[a-zA-Z_][a-zA-Z0-9_]*/)),
-		_tickIdent: ($) => token(seq('`', /[^`]+/, '`')),
-		_bracketIdent: ($) => token(seq('⟨', /[^⟩]+/, '⟩')),
+		// The empty identifier is legal: `DEFINE TABLE \`\``, `CREATE \`\`:1`
+		// and `INFO FOR TB \`\`` all run on 3.2.3.
+		_tickIdent: ($) =>
+			token(seq('`', repeat(choice(/[^`\\]/, /\\[\s\S]/)), '`')),
+		_bracketIdent: ($) => token(seq('⟨', /[^⟩]*/, '⟩')),
 		_numberident: ($) =>
 			token(choice(/[a-zA-Z_][a-zA-Z0-9_]*/, /[0-9][a-zA-Z0-9_]*/)),
 
@@ -2635,6 +3283,8 @@ export default grammar({
 				$._kw_snowball,
 				$._kw_uppercase,
 				$._kw_lowercase,
+				// `mapper('…/lemmatization-en.txt')` maps terms from a file.
+				$._kw_mapper,
 			),
 
 		AnalyzerTokenizer: ($) =>
@@ -2763,6 +3413,17 @@ export default grammar({
 		_kw_exclude: ($) => kw('exclude'),
 		_kw_exists: ($) => kw('exists'),
 		_kw_explain: ($) => kw('explain'),
+		_kw_compact: ($) => kw('compact'),
+		_kw_mapper: ($) => kw('mapper'),
+		_kw_kv: ($) => kw('kv'),
+		_kw_no: ($) => kw('no'),
+		_kw_depth: ($) => kw('depth'),
+		_kw_complexity: ($) => kw('complexity'),
+		_kw_introspection: ($) => kw('introspection'),
+		_kw_system: ($) => kw('system'),
+		_kw_query_timeout: ($) => kw('query_timeout'),
+		_kw_format: ($) => kw('format'),
+		_kw_json: ($) => kw('json'),
 		_kw_expunge: ($) => kw('expunge'),
 		_kw_extend_candidates: ($) => kw('extend_candidates'),
 		_kw_fetch: ($) => kw('fetch'),
@@ -2840,7 +3501,8 @@ export default grammar({
 		_kw_roles: ($) => kw('roles'),
 		_kw_root: ($) => kw('root'),
 		_kw_sc: ($) => kw('sc'),
-		_kw_schemafull: ($) => kw('schemafull'),
+		// 3.2.3 takes both spellings: `DEFINE TABLE t SCHEMAFUL` parses.
+		_kw_schemafull: ($) => choice(kw('schemaful'), kw('schemafull')),
 		_kw_schemaless: ($) => kw('schemaless'),
 		_kw_scope: ($) => kw('scope'),
 		_kw_search: ($) => kw('search'),
@@ -2970,6 +3632,9 @@ export default grammar({
 		_kw_batch: ($) => kw('batch'),
 		_kw_matches: ($) => kw('matches'),
 		_kw_original: ($) => kw('original'),
+		_kw_retry: ($) => kw('retry'),
+		_kw_maxdepth: ($) => kw('maxdepth'),
+		_kw_prepare: ($) => kw('prepare'),
 		_kw_future: ($) => kw('future'),
 		_kw_import: ($) => kw('import'),
 		_kw_fulltext: ($) => kw('fulltext'),
@@ -3108,6 +3773,19 @@ export default grammar({
 				$._kw_post,
 				$._kw_postings_cache,
 				$._kw_postings_order,
+				$._kw_prepare,
+				$._kw_format,
+				$._kw_compact,
+				$._kw_kv,
+				$._kw_no,
+				$._kw_depth,
+				$._kw_complexity,
+				$._kw_introspection,
+				$._kw_system,
+				$._kw_query_timeout,
+				$._kw_json,
+				$._kw_retry,
+				$._kw_maxdepth,
 				$._kw_put,
 				$._kw_readonly,
 				$._kw_rebuild,

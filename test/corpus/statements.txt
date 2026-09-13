@@ -16,7 +16,7 @@ ALTER TABLE person
 alter :: Alter table drop
 =========================
 
-ALTER TABLE person DROP
+ALTER TABLE person DROP COMMENT
 
 ---
 
@@ -25,6 +25,7 @@ ALTER TABLE person DROP
     (Keyword)
     (Keyword)
     (Ident)
+    (Keyword)
     (Keyword)))
 
 ===============================
@@ -232,8 +233,7 @@ CREATE t SET tags[*].seen = true
       (FieldAssignment
         (Idiom
           (Ident)
-          (Filter
-            (Any))
+          (Any)
           (Ident))
         (Operator)
         (Bool)))))
@@ -671,10 +671,11 @@ DEFINE EVENT e ON TABLE file WHEN $event = 'DELETE' ASYNC THEN { };
         (VariableName)
         (Operator)
         (String)))
+    (AsyncClause
+      (Keyword))
     (ThenClause
       (Keyword)
-      (Keyword)
-      (Block
+      (Object
         (BraceOpen)
         (BraceClose)))))
 
@@ -815,8 +816,7 @@ DEFINE FIELD tags[*] ON t TYPE string
     (Keyword)
     (Idiom
       (Ident)
-      (Filter
-        (Any)))
+      (Any))
     (OnTableClause
       (Keyword)
       (Ident))
@@ -839,8 +839,7 @@ DEFINE FIELD meta.tags[*].name ON t TYPE string
     (Idiom
       (Ident)
       (Ident)
-      (Filter
-        (Any))
+      (Any)
       (Ident))
     (OnTableClause
       (Keyword)
@@ -3305,8 +3304,9 @@ REMOVE USER tobie ON ROOT
     (Keyword)
     (Keyword)
     (Ident)
-    (Keyword)
-    (Keyword)))
+    (OnRootNsDbClause
+      (Keyword)
+      (Keyword))))
 
 ======================
 remove :: Remove token
@@ -5730,3 +5730,2931 @@ REMOVE ACCESS api ON DB
     (OnRootNsDbClause
       (Keyword)
       (Keyword))))
+
+
+========================================================
+define :: Define table with the one-L SCHEMAFUL spelling
+========================================================
+
+DEFINE TABLE test SCHEMAFUL TYPE NORMAL
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (Keyword)
+    (TableTypeClause
+      (Keyword)
+      (Keyword))))
+
+===============================================================
+define :: Define table with a changefeed including the original
+===============================================================
+
+DEFINE TABLE record SCHEMALESS CHANGEFEED 1h INCLUDE ORIGINAL
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (Keyword)
+    (ChangefeedClause
+      (Keyword)
+      (Duration
+        (DurationPart))
+      (Keyword)
+      (Keyword))))
+
+===============================================
+define :: Permission groups separated by commas
+===============================================
+
+DEFINE FIELD test ON user PERMISSIONS FOR select NONE, FOR create, update FULL
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Idiom
+      (Ident))
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (PermissionsForClause
+      (Keyword)
+      (PermissionGroup
+        (Keyword)
+        (Keyword)
+        (None))
+      (PermissionGroup
+        (Keyword)
+        (Keyword)
+        (Keyword)
+        (Literal)))))
+
+==============================
+alter :: Alter table if exists
+==============================
+
+ALTER TABLE IF EXISTS person COMMENT 'bla'
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (IfExistsClause
+      (Keyword)
+      (Keyword))
+    (Ident)
+    (CommentClause
+      (Keyword)
+      (String))))
+
+======================================
+alter :: Alter table with every clause
+======================================
+
+ALTER TABLE person SCHEMALESS PERMISSIONS FOR create FULL CHANGEFEED 1d COMMENT 'test' TYPE NORMAL
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (Keyword)
+    (PermissionsForClause
+      (Keyword)
+      (PermissionGroup
+        (Keyword)
+        (Keyword)
+        (Literal)))
+    (ChangefeedClause
+      (Keyword)
+      (Duration
+        (DurationPart)))
+    (CommentClause
+      (Keyword)
+      (String))
+    (TableTypeClause
+      (Keyword)
+      (Keyword))))
+
+============================
+alter :: Alter index comment
+============================
+
+ALTER INDEX idx ON person COMMENT "test"
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (CommentClause
+      (Keyword)
+      (String))))
+
+===================================
+alter :: Alter index prepare remove
+===================================
+
+ALTER INDEX idx ON person PREPARE REMOVE COMMENT 'may rebuild instead'
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (PrepareClause
+      (Keyword)
+      (Keyword))
+    (CommentClause
+      (Keyword)
+      (String))))
+
+=========================================
+alter :: Alter index dropping its comment
+=========================================
+
+ALTER INDEX idx ON person DROP COMMENT
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (Keyword)
+    (Keyword)))
+
+==============================================================
+references :: A reverse reference names the field it traverses
+==============================================================
+
+chat:general<~(message FIELD chat)
+
+---
+
+(SurrealQL
+  (Path
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (Lookup
+      (LookupLeft)
+      (LookupSelection
+        (GraphPredicate
+          (Ident)
+          (GraphFieldClause
+            (Keyword)
+            (Ident)))))))
+
+=================================================================
+references :: Each predicate in a selection carries its own field
+=================================================================
+
+chat:general<~(message FIELD chat, note FIELD thread)
+
+---
+
+(SurrealQL
+  (Path
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (Lookup
+      (LookupLeft)
+      (LookupSelection
+        (GraphPredicate
+          (Ident)
+          (GraphFieldClause
+            (Keyword)
+            (Ident)))
+        (GraphPredicate
+          (Ident)
+          (GraphFieldClause
+            (Keyword)
+            (Ident)))))))
+
+==============================================================
+references :: A reverse reference with a selection and clauses
+==============================================================
+
+chat:general<~(SELECT id FROM message FIELD chat WHERE author = user:alice ORDER BY id LIMIT 2)
+
+---
+
+(SurrealQL
+  (Path
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (Lookup
+      (LookupLeft)
+      (LookupSelection
+        (GraphFieldSelection
+          (Keyword)
+          (Fields
+            (Predicate
+              (Ident)))
+          (Keyword))
+        (GraphPredicate
+          (Ident)
+          (GraphFieldClause
+            (Keyword)
+            (Ident)))
+        (WhereClause
+          (Keyword)
+          (BinaryExpression
+            (Ident)
+            (Operator)
+            (RecordId
+              (RecordTbIdent)
+              (Colon)
+              (RecordIdIdent))))
+        (GraphOrderClause
+          (Keyword)
+          (Keyword)
+          (Order
+            (Idiom
+              (Ident))))
+        (GraphLimitStartComboClause
+          (LimitClause
+            (Keyword)
+            (Number
+              (Int))))))))
+
+=====================================================
+references :: A reverse reference over a record range
+=====================================================
+
+chat:bla<~(message:1>..=3 FIELD chat).message
+
+---
+
+(SurrealQL
+  (Path
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (Lookup
+      (LookupLeft)
+      (LookupSelection
+        (GraphPredicate
+          (RecordId
+            (RecordTbIdent)
+            (Colon)
+            (RecordIdRange
+              (RecordIdIdent)
+              (RangeOp)
+              (RecordIdIdent)))
+          (GraphFieldClause
+            (Keyword)
+            (Ident)))))
+    (Subscript
+      (Ident))))
+
+=====================================================
+references :: A reverse reference as a computed field
+=====================================================
+
+DEFINE FIELD OVERWRITE profiles ON TABLE account COMPUTED <~(profile FIELD account)
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (OverwriteClause
+      (Keyword))
+    (Idiom
+      (Ident))
+    (OnTableClause
+      (Keyword)
+      (Keyword)
+      (Ident))
+    (ComputedClause
+      (Keyword)
+      (Path
+        (Lookup
+          (LookupLeft)
+          (LookupSelection
+            (GraphPredicate
+              (Ident)
+              (GraphFieldClause
+                (Keyword)
+                (Ident)))))))))
+
+=================================
+if-else :: IF as a computed field
+=================================
+
+DEFINE FIELD a ON t COMPUTED IF $self.b > 0 THEN $self.b ELSE 0 END
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Idiom
+      (Ident))
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (ComputedClause
+      (Keyword)
+      (IfElseStatement
+        (Keyword)
+        (Legacy
+          (BinaryExpression
+            (Path
+              (VariableName)
+              (Subscript
+                (Ident)))
+            (Operator)
+            (Number
+              (Int)))
+          (Keyword)
+          (Path
+            (VariableName)
+            (Subscript
+              (Ident)))
+          (Keyword)
+          (Number
+            (Int))
+          (Keyword))))))
+
+===========================================
+if-else :: IF as a VALUE clause, block form
+===========================================
+
+DEFINE FIELD f ON t TYPE number VALUE IF $value > 100 { $value * 2 } ELSE { 123456789 }
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Idiom
+      (Ident))
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (TypeClause
+      (Keyword)
+      (TypeName))
+    (ValueClause
+      (Keyword)
+      (IfElseStatement
+        (Keyword)
+        (Modern
+          (BinaryExpression
+            (VariableName)
+            (Operator)
+            (Number
+              (Int)))
+          (Block
+            (BraceOpen)
+            (BinaryExpression
+              (VariableName)
+              (Operator)
+              (Number
+                (Int)))
+            (BraceClose))
+          (Keyword)
+          (Block
+            (BraceOpen)
+            (Number
+              (Int))
+            (BraceClose)))))))
+
+===========================================
+if-else :: IF as a projection with an alias
+===========================================
+
+SELECT id, IF type::is_none(refs) THEN NONE ELSE 1 END AS resolved FROM t
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Ident))
+      (Predicate
+        (IfElseStatement
+          (Keyword)
+          (Legacy
+            (FunctionCall
+              (FunctionName)
+              (ArgumentList
+                (Ident)))
+            (Keyword)
+            (None)
+            (Keyword)
+            (Number
+              (Int))
+            (Keyword)))
+        (Keyword)
+        (Ident)))
+    (Keyword)
+    (Ident)))
+
+===============================
+if-else :: IF as a closure body
+===============================
+
+RETURN set::reduce([1], |$acc, $v| IF $v > $acc THEN $v ELSE $acc END)
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (FunctionCall
+      (FunctionName)
+      (ArgumentList
+        (Array
+          (Number
+            (Int)))
+        (Closure
+          (Pipe)
+          (ParamDefinition
+            (VariableName))
+          (ParamDefinition
+            (VariableName))
+          (Pipe)
+          (IfElseStatement
+            (Keyword)
+            (Legacy
+              (BinaryExpression
+                (VariableName)
+                (Operator)
+                (VariableName))
+              (Keyword)
+              (VariableName)
+              (Keyword)
+              (VariableName)
+              (Keyword))))))))
+
+==================================================
+if-else :: An ASSERT and a VALUE that are both IFs
+==================================================
+
+DEFINE FIELD name ON TABLE person ASSERT IF $input THEN true ELSE true END VALUE IF $input THEN 'N' ELSE $value END
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Idiom
+      (Ident))
+    (OnTableClause
+      (Keyword)
+      (Keyword)
+      (Ident))
+    (AssertClause
+      (Keyword)
+      (IfElseStatement
+        (Keyword)
+        (Legacy
+          (VariableName)
+          (Keyword)
+          (Bool)
+          (Keyword)
+          (Bool)
+          (Keyword))))
+    (ValueClause
+      (Keyword)
+      (IfElseStatement
+        (Keyword)
+        (Legacy
+          (VariableName)
+          (Keyword)
+          (String)
+          (Keyword)
+          (VariableName)
+          (Keyword))))))
+
+
+=========================================
+define :: Define event with a RETURN body
+=========================================
+
+DEFINE EVENT event ON TABLE TB WHEN true THEN RETURN 'foo'
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Keyword)
+      (Ident))
+    (WhenClause
+      (Keyword)
+      (Bool))
+    (ThenClause
+      (Keyword)
+      (ReturnStatement
+        (Keyword)
+        (String)))))
+
+===========================================================
+define :: Define event with a bare value body and a comment
+===========================================================
+
+DEFINE EVENT ev ON tab WHEN a == "b" THEN bla COMMENT "comment"
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (WhenClause
+      (Keyword)
+      (BinaryExpression
+        (Ident)
+        (Operator)
+        (String)))
+    (ThenClause
+      (Keyword)
+      (Ident))
+    (CommentClause
+      (Keyword)
+      (String))))
+
+====================================================
+define :: Define event async with retry and maxdepth
+====================================================
+
+DEFINE EVENT event ON TABLE tb WHEN null THEN null, none ASYNC RETRY 5 MAXDEPTH 64
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Keyword)
+      (Ident))
+    (WhenClause
+      (Keyword)
+      (None))
+    (ThenClause
+      (Keyword)
+      (None)
+      (None))
+    (AsyncClause
+      (Keyword)
+      (EventRetryClause
+        (Keyword)
+        (Number
+          (Int)))
+      (EventMaxDepthClause
+        (Keyword)
+        (Number
+          (Int))))))
+
+===================================================
+define :: Define event async before the when clause
+===================================================
+
+DEFINE EVENT test ON user ASYNC RETRY 2 MAXDEPTH 6 WHEN true THEN (CREATE activity)
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (AsyncClause
+      (Keyword)
+      (EventRetryClause
+        (Keyword)
+        (Number
+          (Int)))
+      (EventMaxDepthClause
+        (Keyword)
+        (Number
+          (Int))))
+    (WhenClause
+      (Keyword)
+      (Bool))
+    (ThenClause
+      (Keyword)
+      (SubQuery
+        (CreateStatement
+          (Keyword)
+          (Ident))))))
+
+
+==============================================
+kill :: Kill a live query named by a parameter
+==============================================
+
+KILL $param
+
+---
+
+(SurrealQL
+  (KillStatement
+    (Keyword)
+    (VariableName)))
+
+===========================================
+show :: Show changes for the whole database
+===========================================
+
+SHOW CHANGES FOR DATABASE SINCE d"2012-04-23T18:25:43.0000511Z"
+
+---
+
+(SurrealQL
+  (ShowStatement
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (String)))
+
+=============================
+for :: For over an expression
+=============================
+
+FOR $foo IN (SELECT foo FROM bar) * 2 { BREAK }
+
+---
+
+(SurrealQL
+  (ForStatement
+    (Keyword)
+    (VariableName)
+    (Keyword)
+    (BinaryExpression
+      (SubQuery
+        (SelectStatement
+          (Keyword)
+          (Fields
+            (Predicate
+              (Ident)))
+          (Keyword)
+          (Ident)))
+      (Operator)
+      (Number
+        (Int)))
+    (Block
+      (BraceOpen)
+      (BreakStatement
+        (Keyword))
+      (BraceClose))))
+
+====================================
+live :: Live select from a parameter
+====================================
+
+LIVE SELECT DIFF FROM $foo
+
+---
+
+(SurrealQL
+  (LiveSelectStatement
+    (Keyword)
+    (Keyword)
+    (Literal)
+    (Keyword)
+    (VariableName)))
+
+====================================
+return :: Return with a fetch clause
+====================================
+
+RETURN $users FETCH admin, editor
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (VariableName)
+    (FetchClause
+      (Keyword)
+      (Idiom
+        (Ident))
+      (Idiom
+        (Ident)))))
+
+============================================
+remove :: Remove user on the NS abbreviation
+============================================
+
+REMOVE USER tobie ON NS
+
+---
+
+(SurrealQL
+  (RemoveStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnRootNsDbClause
+      (Keyword)
+      (Keyword))))
+
+===================================
+remove :: Remove the default config
+===================================
+
+REMOVE CONFIG IF EXISTS DEFAULT
+
+---
+
+(SurrealQL
+  (RemoveStatement
+    (Keyword)
+    (Keyword)
+    (IfExistsClause
+      (Keyword)
+      (Keyword))
+    (Keyword)))
+
+==========================================================
+remove :: Remove a function written with its argument list
+==========================================================
+
+REMOVE FUNCTION fn::greet()
+
+---
+
+(SurrealQL
+  (RemoveStatement
+    (Keyword)
+    (Keyword)
+    (FunctionName)))
+
+=======================================================
+insert :: Insert relation ignore, in the engine's order
+=======================================================
+
+INSERT RELATION IGNORE INTO like (id, in, out) VALUES (2, person:1, person:2)
+
+---
+
+(SurrealQL
+  (InsertStatement
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (Ident)
+    (Ident)
+    (Ident)
+    (Keyword)
+    (Number
+      (Int))
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))))
+
+=====================================
+insert :: Insert rows from a subquery
+=====================================
+
+INSERT INTO other (SELECT * FROM test)
+
+---
+
+(SurrealQL
+  (InsertStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (SubQuery
+      (SelectStatement
+        (Keyword)
+        (Fields
+          (Any))
+        (Keyword)
+        (Ident)))))
+
+========================================
+insert :: Insert into a parameter target
+========================================
+
+INSERT IGNORE INTO $foo (a, b) VALUES (1, 2) ON DUPLICATE KEY UPDATE a.b +?= null
+
+---
+
+(SurrealQL
+  (InsertStatement
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (VariableName)
+    (Ident)
+    (Ident)
+    (Keyword)
+    (Number
+      (Int))
+    (Number
+      (Int))
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (FieldAssignment
+      (Idiom
+        (Ident)
+        (Ident))
+      (Operator)
+      (None))))
+
+===============================================
+relate :: Relate with a subquery end and UNIQUE
+===============================================
+
+RELATE ONLY [1,2]->a:b->(CREATE foo) UNIQUE SET a += 1 RETURN NONE
+
+---
+
+(SurrealQL
+  (RelateStatement
+    (Keyword)
+    (Keyword)
+    (Array
+      (Number
+        (Int))
+      (Number
+        (Int)))
+    (LookupRight)
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (LookupRight)
+    (SubQuery
+      (CreateStatement
+        (Keyword)
+        (Ident)))
+    (UniqueClause
+      (Keyword))
+    (SetClause
+      (Keyword)
+      (FieldAssignment
+        (Ident)
+        (Operator)
+        (Number
+          (Int))))
+    (ReturnClause
+      (Keyword)
+      (Fields
+        (Predicate
+          (None))))))
+
+=================================================
+relate :: Relate through a function-produced edge
+=================================================
+
+RELATE $tobie->(type::table("knows"))->$jaime CONTENT { id: "bar" }
+
+---
+
+(SurrealQL
+  (RelateStatement
+    (Keyword)
+    (VariableName)
+    (LookupRight)
+    (SubQuery
+      (FunctionCall
+        (FunctionName)
+        (ArgumentList
+          (String))))
+    (LookupRight)
+    (VariableName)
+    (ContentClause
+      (Keyword)
+      (Object
+        (BraceOpen)
+        (ObjectContent
+          (ObjectProperty
+            (ObjectKey
+              (KeyName))
+            (Colon)
+            (String)))
+        (BraceClose)))))
+
+
+===============================================================
+define :: Define access JWT with an issuer key and AUTHENTICATE
+===============================================================
+
+DEFINE ACCESS a ON DATABASE TYPE JWT ALGORITHM EDDSA KEY "foo" WITH ISSUER KEY "bar" AUTHENTICATE true
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (AccessDefinition
+      (Keyword)
+      (Ident)
+      (OnRootNsDbClause
+        (Keyword)
+        (Keyword))
+      (AccessTypeClause
+        (Keyword)
+        (Keyword)
+        (JwtClause
+          (Keyword)
+          (Ident)
+          (Keyword)
+          (String)
+          (IssuerClause
+            (Keyword)
+            (Keyword)
+            (Keyword)
+            (String))))
+      (AuthenticateClause
+        (Keyword)
+        (Bool)))))
+
+=================================================================
+define :: Define access record with refresh before the JWT clause
+=================================================================
+
+DEFINE ACCESS a ON DB TYPE RECORD WITH REFRESH WITH JWT ALGORITHM PS512 KEY "foo" WITH ISSUER KEY "bar" DURATION FOR GRANT 10d
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (AccessDefinition
+      (Keyword)
+      (Ident)
+      (OnRootNsDbClause
+        (Keyword)
+        (Keyword))
+      (AccessTypeClause
+        (Keyword)
+        (Keyword)
+        (RefreshClause
+          (Keyword)
+          (Keyword))
+        (WithJwtClause
+          (Keyword)
+          (Keyword)
+          (JwtClause
+            (Keyword)
+            (Ident)
+            (Keyword)
+            (String)
+            (IssuerClause
+              (Keyword)
+              (Keyword)
+              (Keyword)
+              (String)))))
+      (DurationClause
+        (Keyword)
+        (DurationValue
+          (Keyword)
+          (Keyword)
+          (Duration
+            (DurationPart)))))))
+
+================================================================
+define :: Define access record with refresh after the JWT clause
+================================================================
+
+DEFINE ACCESS a ON DB TYPE RECORD WITH JWT ALGORITHM PS512 KEY "foo" WITH ISSUER KEY "bar" WITH REFRESH DURATION FOR GRANT 10d
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (AccessDefinition
+      (Keyword)
+      (Ident)
+      (OnRootNsDbClause
+        (Keyword)
+        (Keyword))
+      (AccessTypeClause
+        (Keyword)
+        (Keyword)
+        (WithJwtClause
+          (Keyword)
+          (Keyword)
+          (JwtClause
+            (Keyword)
+            (Ident)
+            (Keyword)
+            (String)
+            (IssuerClause
+              (Keyword)
+              (Keyword)
+              (Keyword)
+              (String))))
+        (RefreshClause
+          (Keyword)
+          (Keyword)))
+      (DurationClause
+        (Keyword)
+        (DurationValue
+          (Keyword)
+          (Keyword)
+          (Duration
+            (DurationPart)))))))
+
+=================================================
+define :: Define access record with value clauses
+=================================================
+
+DEFINE ACCESS a ON DB TYPE RECORD SIGNUP true SIGNIN false AUTHENTICATE true DURATION FOR SESSION 7d
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (AccessDefinition
+      (Keyword)
+      (Ident)
+      (OnRootNsDbClause
+        (Keyword)
+        (Keyword))
+      (AccessTypeClause
+        (Keyword)
+        (Keyword)
+        (SignupClause
+          (Keyword)
+          (Bool))
+        (SigninClause
+          (Keyword)
+          (Bool)))
+      (AuthenticateClause
+        (Keyword)
+        (Bool))
+      (DurationClause
+        (Keyword)
+        (DurationValue
+          (Keyword)
+          (Keyword)
+          (Duration
+            (DurationPart)))))))
+
+=============================================================
+update :: Unset a flattened path, a graph path and a wildcard
+=============================================================
+
+UPDATE ONLY a->b WITH INDEX index, index_2 UNSET foo..., a->b, c[*] WHERE true RETURN DIFF TIMEOUT 1s EXPLAIN FULL
+
+---
+
+(SurrealQL
+  (UpdateStatement
+    (Keyword)
+    (Keyword)
+    (Path
+      (Ident)
+      (Lookup
+        (LookupRight)
+        (Ident)))
+    (WithClause
+      (Keyword)
+      (Keyword)
+      (Ident)
+      (Ident))
+    (UnsetClause
+      (Keyword)
+      (Predicate
+        (Path
+          (Ident)
+          (Flatten)))
+      (Predicate
+        (Path
+          (Ident)
+          (Lookup
+            (LookupRight)
+            (Ident))))
+      (Predicate
+        (Path
+          (Ident)
+          (Filter
+            (Any)))))
+    (WhereClause
+      (Keyword)
+      (Bool))
+    (ReturnClause
+      (Keyword)
+      (Literal))
+    (TimeoutClause
+      (Keyword)
+      (Duration
+        (DurationPart)))
+    (ExplainClause
+      (Keyword)
+      (Literal))))
+
+============================================================
+values :: A block whose first statement is a namespaced call
+============================================================
+
+{ fn::assert(true); RETURN "OK"; }
+
+---
+
+(SurrealQL
+  (Block
+    (BraceOpen)
+    (FunctionCall
+      (FunctionName)
+      (ArgumentList
+        (Bool)))
+    (ReturnStatement
+      (Keyword)
+      (String))
+    (BraceClose)))
+
+
+============================
+explain :: Explain a closure
+============================
+
+EXPLAIN |$x: int| -> int { $x * 2 }
+
+---
+
+(SurrealQL
+  (ExplainStatement
+    (Keyword)
+    (Closure
+      (Pipe)
+      (ParamDefinition
+        (VariableName)
+        (Colon)
+        (Type
+          (TypeName)))
+      (Pipe)
+      (LookupRight)
+      (TypeName)
+      (Block
+        (BraceOpen)
+        (BinaryExpression
+          (VariableName)
+          (Operator)
+          (Number
+            (Int)))
+        (BraceClose)))))
+
+===========================================
+explain :: Explain a control-flow statement
+===========================================
+
+EXPLAIN FOR $item IN [1, 2, 3] { $item }
+
+---
+
+(SurrealQL
+  (ExplainStatement
+    (Keyword)
+    (ForStatement
+      (Keyword)
+      (VariableName)
+      (Keyword)
+      (Array
+        (Number
+          (Int))
+        (Number
+          (Int))
+        (Number
+          (Int)))
+      (Block
+        (BraceOpen)
+        (VariableName)
+        (BraceClose)))))
+
+===============================
+explain :: Explain a graph path
+===============================
+
+EXPLAIN person:tobie->knows->person
+
+---
+
+(SurrealQL
+  (ExplainStatement
+    (Keyword)
+    (Path
+      (RecordId
+        (RecordTbIdent)
+        (Colon)
+        (RecordIdIdent))
+      (Lookup
+        (LookupRight)
+        (Ident))
+      (Lookup
+        (LookupRight)
+        (Ident)))))
+
+=======================================
+explain :: Explain analyze a bare value
+=======================================
+
+EXPLAIN ANALYZE 9
+
+---
+
+(SurrealQL
+  (ExplainStatement
+    (Keyword)
+    (Keyword)
+    (Number
+      (Int))))
+
+======================================
+explain :: Explain analyze format json
+======================================
+
+EXPLAIN ANALYZE FORMAT JSON SELECT * FROM t
+
+---
+
+(SurrealQL
+  (ExplainStatement
+    (Keyword)
+    (Keyword)
+    (FormatClause
+      (Keyword)
+      (Keyword))
+    (SelectStatement
+      (Keyword)
+      (Fields
+        (Any))
+      (Keyword)
+      (Ident))))
+
+=============================
+select :: Select at a version
+=============================
+
+SELECT * FROM item WHERE score >= 30 VERSION $ts
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Any))
+    (Keyword)
+    (Ident)
+    (WhereClause
+      (Keyword)
+      (BinaryExpression
+        (Ident)
+        (Operator)
+        (Number
+          (Int))))
+    (VersionClause
+      (Keyword)
+      (VariableName))))
+
+========================================
+info :: Info for a database at a version
+========================================
+
+INFO FOR DB VERSION d'2025-01-01T00:00:00Z'
+
+---
+
+(SurrealQL
+  (InfoForStatement
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (VersionClause
+      (Keyword)
+      (String))))
+
+=============================================
+define :: Define with a parameterized comment
+=============================================
+
+DEFINE DATABASE test COMMENT $comment
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (CommentClause
+      (Keyword)
+      (VariableName))))
+
+======================================
+define :: Define param without a value
+======================================
+
+DEFINE PARAM $permissions_none PERMISSIONS NONE
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (VariableName)
+    (PermissionsBasicClause
+      (Keyword)
+      (None))))
+
+==================================
+select :: Timeout from a parameter
+==================================
+
+SELECT * FROM |test:1..1000| TIMEOUT $timeout
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Any))
+    (Keyword)
+    (RangeRecordId
+      (Pipe)
+      (RecordId
+        (RecordTbIdent)
+        (Colon)
+        (RecordIdRange
+          (RecordIdIdent)
+          (RangeOp)
+          (RecordIdIdent)))
+      (Pipe))
+    (TimeoutClause
+      (Keyword)
+      (VariableName))))
+
+
+======================================
+alter :: Alter field with every clause
+======================================
+
+ALTER FIELD a ON t TYPE record<test> READONLY VALUE test:123 ASSERT true DEFAULT ALWAYS test:123 PERMISSIONS NONE COMMENT "test"
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Idiom
+      (Ident))
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (TypeClause
+      (Keyword)
+      (ParameterizedType
+        (TypeName)
+        (TypeName)))
+    (ReadonlyClause
+      (Keyword))
+    (ValueClause
+      (Keyword)
+      (RecordId
+        (RecordTbIdent)
+        (Colon)
+        (RecordIdIdent)))
+    (AssertClause
+      (Keyword)
+      (Bool))
+    (DefaultClause
+      (Keyword)
+      (DefaultAlways
+        (Keyword))
+      (RecordId
+        (RecordTbIdent)
+        (Colon)
+        (RecordIdIdent)))
+    (PermissionsForClause
+      (Keyword)
+      (None))
+    (CommentClause
+      (Keyword)
+      (String))))
+
+=====================================
+alter :: Alter field dropping clauses
+=====================================
+
+ALTER FIELD a ON t DROP TYPE DROP READONLY DROP VALUE DROP ASSERT DROP DEFAULT DROP COMMENT
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Idiom
+      (Ident))
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)))
+
+===============================
+alter :: Alter access durations
+===============================
+
+ALTER ACCESS my_access ON DATABASE DURATION FOR TOKEN 2h, FOR SESSION 48h COMMENT "updated access"
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnRootNsDbClause
+      (Keyword)
+      (Keyword))
+    (DurationClause
+      (Keyword)
+      (DurationValue
+        (Keyword)
+        (Keyword)
+        (Duration
+          (DurationPart)))
+      (DurationValue
+        (Keyword)
+        (Keyword)
+        (Duration
+          (DurationPart))))
+    (CommentClause
+      (Keyword)
+      (String))))
+
+===================
+alter :: Alter user
+===================
+
+ALTER USER testuser ON DATABASE PASSWORD 'pw2' ROLES EDITOR DURATION FOR TOKEN 1h DROP COMMENT
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnRootNsDbClause
+      (Keyword)
+      (Keyword))
+    (PasswordClause
+      (Keyword)
+      (String))
+    (RolesClause
+      (Keyword)
+      (Ident))
+    (DurationClause
+      (Keyword)
+      (DurationValue
+        (Keyword)
+        (Keyword)
+        (Duration
+          (DurationPart))))
+    (Keyword)
+    (Keyword)))
+
+=======================
+alter :: Alter analyzer
+=======================
+
+ALTER ANALYZER my_analyzer TOKENIZERS class FILTERS ascii COMMENT "updated analyzer"
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (TokenizersClause
+      (Keyword)
+      (AnalyzerTokenizer))
+    (FiltersClause
+      (Keyword)
+      (AnalyzerFilters
+        (Filter)))
+    (CommentClause
+      (Keyword)
+      (String))))
+
+====================
+alter :: Alter event
+====================
+
+ALTER EVENT my_event ON test WHEN $event = "UPDATE" THEN { RETURN 1 } DROP COMMENT
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (WhenClause
+      (Keyword)
+      (BinaryExpression
+        (VariableName)
+        (Operator)
+        (String)))
+    (ThenClause
+      (Keyword)
+      (Block
+        (BraceOpen)
+        (ReturnStatement
+          (Keyword)
+          (Number
+            (Int)))
+        (BraceClose)))
+    (Keyword)
+    (Keyword)))
+
+====================
+alter :: Alter param
+====================
+
+ALTER PARAM $test VALUE 100 PERMISSIONS NONE DROP COMMENT
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (VariableName)
+    (Keyword)
+    (Number
+      (Int))
+    (PermissionsBasicClause
+      (Keyword)
+      (None))
+    (Keyword)
+    (Keyword)))
+
+=======================
+alter :: Alter function
+=======================
+
+ALTER FUNCTION fn::greet($name: string) { RETURN $name; } COMMENT "x" PERMISSIONS FULL
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (FunctionName)
+    (ParamDefinition
+      (VariableName)
+      (Colon)
+      (Type
+        (TypeName)))
+    (Block
+      (BraceOpen)
+      (ReturnStatement
+        (Keyword)
+        (VariableName))
+      (BraceClose))
+    (CommentClause
+      (Keyword)
+      (String))
+    (PermissionsBasicClause
+      (Keyword)
+      (Literal))))
+
+==================
+alter :: Alter api
+==================
+
+ALTER API "/mytest" FOR get, post THEN { RETURN "new" } FOR any DROP THEN COMMENT "updated api"
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (String)
+    (Keyword)
+    (HttpMethod)
+    (HttpMethod)
+    (Keyword)
+    (Block
+      (BraceOpen)
+      (ReturnStatement
+        (Keyword)
+        (String))
+      (BraceClose))
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (CommentClause
+      (Keyword)
+      (String))))
+
+===============================
+alter :: Alter sequence timeout
+===============================
+
+ALTER SEQUENCE seq TIMEOUT 5s
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (TimeoutClause
+      (Keyword)
+      (Duration
+        (DurationPart)))))
+
+=====================
+alter :: Alter config
+=====================
+
+ALTER CONFIG IF EXISTS DEFAULT NAMESPACE test
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (IfExistsClause
+      (Keyword)
+      (Keyword))
+    (Keyword)
+    (Keyword)
+    (Ident)))
+
+================
+alter :: Compact
+================
+
+ALTER SYSTEM COMPACT
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (CompactClause
+      (Keyword))))
+
+=======================================
+alter :: Alter the system query timeout
+=======================================
+
+ALTER SYSTEM DROP QUERY_TIMEOUT
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)))
+
+=========================================
+alter :: Alter a parameterized field name
+=========================================
+
+ALTER FIELD $prm_fld ON $prm_fld_tb COMMENT "prm-field-alt"
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (VariableName)
+    (OnTableClause
+      (Keyword)
+      (VariableName))
+    (CommentClause
+      (Keyword)
+      (String))))
+
+===========================================
+define :: Define graphql config with limits
+===========================================
+
+DEFINE CONFIG OVERWRITE GRAPHQL TABLES AUTO DEPTH 20 COMPLEXITY 1000 INTROSPECTION NONE
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (OverwriteClause
+      (Keyword))
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Number
+      (Int))
+    (Keyword)
+    (Number
+      (Int))
+    (Keyword)
+    (None)))
+
+===================================
+define :: Define the default config
+===================================
+
+DEFINE CONFIG DEFAULT NAMESPACE myns DATABASE mydb
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (Keyword)
+    (Ident)))
+
+==================================
+define :: Define api with a comment
+===================================
+
+DEFINE API "/commented" FOR any THEN { { status: 200, body: {} }; } COMMENT "This is a test API"
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (String)
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Block
+      (BraceOpen)
+      (Object
+        (BraceOpen)
+        (ObjectContent
+          (ObjectProperty
+            (ObjectKey
+              (KeyName))
+            (Colon)
+            (Number
+              (Int)))
+          (ObjectProperty
+            (ObjectKey
+              (KeyName))
+            (Colon)
+            (Object
+              (BraceOpen)
+              (BraceClose))))
+        (BraceClose))
+      (BraceClose))
+    (CommentClause
+      (Keyword)
+      (String))))
+
+==========================================
+misc :: A source of nothing but semicolons
+==========================================
+
+;;
+
+---
+
+(SurrealQL)
+
+======================
+misc :: An empty block
+======================
+
+{;}
+
+---
+
+(SurrealQL
+  (Block
+    (BraceOpen)
+    (BraceClose)))
+
+==================================================
+select :: The matches operator with a boolean mode
+==================================================
+
+SELECT id FROM b WHERE t @AND@ 'hello world'
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Ident)))
+    (Keyword)
+    (Ident)
+    (WhereClause
+      (Keyword)
+      (BinaryExpression
+        (Ident)
+        (Operator
+          (Keyword))
+        (String)))))
+
+==========================================================
+select :: The matches operator with a reference and a mode
+==========================================================
+
+SELECT id FROM b WHERE t @1,OR@ 'bar foo'
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Ident)))
+    (Keyword)
+    (Ident)
+    (WhereClause
+      (Keyword)
+      (BinaryExpression
+        (Ident)
+        (Operator
+          (Number
+            (Int))
+          (Keyword))
+        (String)))))
+
+==========================================================
+define :: Define field with a parameterized name and table
+==========================================================
+
+DEFINE FIELD $name ON $table COMMENT $comment
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (VariableName)
+    (OnTableClause
+      (Keyword)
+      (VariableName))
+    (CommentClause
+      (Keyword)
+      (VariableName))))
+
+=====================================================
+define :: Define sequence with parameterized settings
+=====================================================
+
+DEFINE SEQUENCE $name BATCH $batch START $start TIMEOUT $timeout
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (VariableName)
+    (SequenceBatchClause
+      (Keyword)
+      (VariableName))
+    (SequenceStartClause
+      (Keyword)
+      (VariableName))
+    (TimeoutClause
+      (Keyword)
+      (VariableName))))
+
+
+=============================================
+select :: With no index, spelled as two words
+=============================================
+
+SELECT id FROM t WITH NO INDEX WHERE id[1] = o:1 AND b = 2025
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Ident)))
+    (Keyword)
+    (Ident)
+    (WithClause
+      (Keyword)
+      (Keyword)
+      (Keyword))
+    (WhereClause
+      (Keyword)
+      (BinaryExpression
+        (BinaryExpression
+          (Path
+            (Ident)
+            (Filter
+              (Number
+                (Int))))
+          (Operator)
+          (RecordId
+            (RecordTbIdent)
+            (Colon)
+            (RecordIdIdent)))
+        (Operator)
+        (BinaryExpression
+          (Ident)
+          (Operator)
+          (Number
+            (Int)))))))
+
+==============================
+select :: Split several fields
+==============================
+
+SELECT id, a, b FROM t SPLIT a, b
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Ident))
+      (Predicate
+        (Ident))
+      (Predicate
+        (Ident)))
+    (Keyword)
+    (Ident)
+    (SplitClause
+      (Keyword)
+      (Idiom
+        (Ident))
+      (Idiom
+        (Ident)))))
+
+=================================
+select :: An alias that is a path
+=================================
+
+SELECT id AS a, modified AS b.c FROM item ORDER BY b.c DESC LIMIT 3
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Ident)
+        (Keyword)
+        (Ident))
+      (Predicate
+        (Ident)
+        (Keyword)
+        (Idiom
+          (Ident)
+          (Ident))))
+    (Keyword)
+    (Ident)
+    (OrderClause
+      (Keyword)
+      (Keyword)
+      (Order
+        (Idiom
+          (Ident)
+          (Ident))
+        (Keyword)))
+    (LimitStartComboClause
+      (LimitClause
+        (Keyword)
+        (Number
+          (Int))))))
+
+=====================================================
+info :: Info for the key-value store, read as a value
+=====================================================
+
+(INFO FOR KV).namespaces
+
+---
+
+(SurrealQL
+  (Path
+    (SubQuery
+      (InfoForStatement
+        (Keyword)
+        (Keyword)
+        (Keyword)))
+    (Subscript
+      (Ident))))
+
+=======================================================
+info :: Info for a parameterized table, read as a value
+=======================================================
+
+(INFO FOR TABLE $table).events
+
+---
+
+(SurrealQL
+  (Path
+    (SubQuery
+      (InfoForStatement
+        (Keyword)
+        (Keyword)
+        (Keyword)
+        (VariableName)))
+    (Subscript
+      (Ident))))
+
+============================
+values :: The time constants
+============================
+
+RETURN time::maximum.year()
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (Path
+      (Constant)
+      (Subscript
+        (IdiomFunction
+          (FunctionName)
+          (ArgumentList))))))
+
+===============================================
+define :: Index fields reached through a method
+===============================================
+
+DEFINE INDEX rid_val ON test FIELDS id.id().val
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)
+        (IdiomFunction
+          (FunctionName)
+          (ArgumentList))
+        (Ident)))))
+
+========================================
+define :: Index fields named dynamically
+========================================
+
+DEFINE INDEX $name ON $table FIELDS a.b, type::field($single_field), type::fields($multiple_fields)
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (VariableName)
+    (OnTableClause
+      (Keyword)
+      (VariableName))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident)
+        (Ident))
+      (FunctionCall
+        (FunctionName)
+        (ArgumentList
+          (VariableName)))
+      (FunctionCall
+        (FunctionName)
+        (ArgumentList
+          (VariableName))))))
+
+==========================================================
+define :: Index fields flattened with the unicode ellipsis
+==========================================================
+
+DEFINE INDEX test ON user FIELDS account, tags…, emails.*.value… UNIQUE
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (FieldsColumnsClause
+      (Keyword)
+      (Idiom
+        (Ident))
+      (Idiom
+        (Ident)
+        (Flatten))
+      (Idiom
+        (Ident)
+        (Any)
+        (Ident)
+        (Flatten)))
+    (IndexClause
+      (UniqueClause
+        (Keyword)))))
+
+==========================================
+values :: Underscores anywhere in a number
+==========================================
+
+RETURN 00009223372036854775_____807
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (Number
+      (Int))))
+
+==============================
+values :: The empty identifier
+==============================
+
+DEFINE FIELD ``.`` ON `` TYPE number
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Idiom
+      (Ident)
+      (Ident))
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (TypeClause
+      (Keyword)
+      (TypeName))))
+
+==============================
+values :: A numeric object key
+==============================
+
+RETURN '1' IN { 1: 1 }
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (BinaryExpression
+      (String)
+      (Operator
+        (Keyword))
+      (Object
+        (BraceOpen)
+        (ObjectContent
+          (ObjectProperty
+            (ObjectKey
+              (Number
+                (Int)))
+            (Colon)
+            (Number
+              (Int))))
+        (BraceClose)))))
+
+========================================
+create :: Create from a record-id string
+========================================
+
+CREATE r'person:100'
+
+---
+
+(SurrealQL
+  (CreateStatement
+    (Keyword)
+    (String)))
+
+
+==========================
+values :: THROW as a value
+==========================
+
+SELECT * FROM accounts WHERE THROW 'leaked: ' + secret
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Any))
+    (Keyword)
+    (Ident)
+    (WhereClause
+      (Keyword)
+      (ThrowStatement
+        (Keyword)
+        (BinaryExpression
+          (String)
+          (Operator)
+          (Ident))))))
+
+================================
+values :: THROW inside an object
+================================
+
+UPDATE accounts MERGE { x: THROW 'leaked: ' + secret }
+
+---
+
+(SurrealQL
+  (UpdateStatement
+    (Keyword)
+    (Ident)
+    (MergeClause
+      (Keyword)
+      (Object
+        (BraceOpen)
+        (ObjectContent
+          (ObjectProperty
+            (ObjectKey
+              (KeyName))
+            (Colon)
+            (ThrowStatement
+              (Keyword)
+              (BinaryExpression
+                (String)
+                (Operator)
+                (Ident)))))
+        (BraceClose)))))
+
+=================================================
+if-else :: A bare data statement as a branch body
+=================================================
+
+IF $record.count THEN UPSERT person:test SET sport += 'football' RETURN sport ELSE UPSERT person:test SET sport = ['basketball'] RETURN sport END
+
+---
+
+(SurrealQL
+  (IfElseStatement
+    (Keyword)
+    (Legacy
+      (Path
+        (VariableName)
+        (Subscript
+          (Ident)))
+      (Keyword)
+      (UpsertStatement
+        (Keyword)
+        (RecordId
+          (RecordTbIdent)
+          (Colon)
+          (RecordIdIdent))
+        (SetClause
+          (Keyword)
+          (FieldAssignment
+            (Ident)
+            (Operator)
+            (String)))
+        (ReturnClause
+          (Keyword)
+          (Fields
+            (Predicate
+              (Ident)))))
+      (Keyword)
+      (UpsertStatement
+        (Keyword)
+        (RecordId
+          (RecordTbIdent)
+          (Colon)
+          (RecordIdIdent))
+        (SetClause
+          (Keyword)
+          (FieldAssignment
+            (Ident)
+            (Operator)
+            (Array
+              (String))))
+        (ReturnClause
+          (Keyword)
+          (Fields
+            (Predicate
+              (Ident)))))
+      (Keyword))))
+
+==============================
+update :: Replace with a value
+==============================
+
+UPDATE person:test REPLACE 'some content'
+
+---
+
+(SurrealQL
+  (UpdateStatement
+    (Keyword)
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (ReplaceClause
+      (Keyword)
+      (String))))
+
+==================================
+record-ids :: A signed range bound
+==================================
+
+RETURN |test:..=-9223372036854775806|
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (RangeRecordId
+      (Pipe)
+      (RecordId
+        (RecordTbIdent)
+        (Colon)
+        (RecordIdRange
+          (RangeOp)
+          (Number
+            (Int))))
+      (Pipe))))
+
+==========================
+relate :: Relate or update
+==========================
+
+RELATE OR UPDATE person:one->likes:[person:one, post:one]->post:one SET note = 'explicit'
+
+---
+
+(SurrealQL
+  (RelateStatement
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (LookupRight)
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (Array
+        (RecordId
+          (RecordTbIdent)
+          (Colon)
+          (RecordIdIdent))
+        (RecordId
+          (RecordTbIdent)
+          (Colon)
+          (RecordIdIdent))))
+    (LookupRight)
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))
+    (SetClause
+      (Keyword)
+      (FieldAssignment
+        (Ident)
+        (Operator)
+        (String)))))
+
+=================================
+values :: A block called in place
+=================================
+
+{||2}()
+
+---
+
+(SurrealQL
+  (FunctionCall
+    (Block
+      (BraceOpen)
+      (Closure
+        (Pipe)
+        (Pipe)
+        (Number
+          (Int)))
+      (BraceClose))
+    (ArgumentList)))
+
+
+===========================================
+insert :: Bulk insert with a trailing comma
+===========================================
+
+INSERT [ { id: a:1, links: [a:2, a:3] }, { id: a:2, links: [] }, ]
+
+---
+
+(SurrealQL
+  (InsertStatement
+    (Keyword)
+    (BulkInsert
+      (Object
+        (BraceOpen)
+        (ObjectContent
+          (ObjectProperty
+            (ObjectKey
+              (KeyName))
+            (Colon)
+            (RecordId
+              (RecordTbIdent)
+              (Colon)
+              (RecordIdIdent)))
+          (ObjectProperty
+            (ObjectKey
+              (KeyName))
+            (Colon)
+            (Array
+              (RecordId
+                (RecordTbIdent)
+                (Colon)
+                (RecordIdIdent))
+              (RecordId
+                (RecordTbIdent)
+                (Colon)
+                (RecordIdIdent)))))
+        (BraceClose))
+      (Object
+        (BraceOpen)
+        (ObjectContent
+          (ObjectProperty
+            (ObjectKey
+              (KeyName))
+            (Colon)
+            (RecordId
+              (RecordTbIdent)
+              (Colon)
+              (RecordIdIdent)))
+          (ObjectProperty
+            (ObjectKey
+              (KeyName))
+            (Colon)
+            (Array)))
+        (BraceClose)))))
+
+=============================================
+select :: A graph selection reading FROM ONLY
+=============================================
+
+SELECT ->(SELECT * FROM ONLY knows LIMIT 1) AS edge FROM ONLY person:alice
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Predicate
+        (Path
+          (Lookup
+            (LookupRight)
+            (LookupSelection
+              (GraphFieldSelection
+                (Keyword)
+                (Fields
+                  (Any))
+                (Keyword)
+                (Keyword))
+              (GraphPredicate
+                (Ident))
+              (GraphLimitStartComboClause
+                (LimitClause
+                  (Keyword)
+                  (Number
+                    (Int)))))))
+        (Keyword)
+        (Ident)))
+    (Keyword)
+    (Keyword)
+    (RecordId
+      (RecordTbIdent)
+      (Colon)
+      (RecordIdIdent))))
+
+============================================
+select :: A lookup through a record-id range
+============================================
+
+SELECT * FROM b:1->computed_edge:[6]..=[$num - 2]
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Any))
+    (Keyword)
+    (Path
+      (RecordId
+        (RecordTbIdent)
+        (Colon)
+        (RecordIdIdent))
+      (Lookup
+        (LookupRight)
+        (RecordId
+          (RecordTbIdent)
+          (Colon)
+          (RecordIdRange
+            (Array
+              (Number
+                (Int)))
+            (RangeOp)
+            (Array
+              (BinaryExpression
+                (VariableName)
+                (Operator)
+                (Number
+                  (Int))))))))))
+
+=========================================
+select :: Fetch a dynamically named field
+=========================================
+
+SELECT *, ->(bought AS purchases) FROM user FETCH type::field('purchases'), purchases.out
+
+---
+
+(SurrealQL
+  (SelectStatement
+    (Keyword)
+    (Fields
+      (Any)
+      (Predicate
+        (Path
+          (Lookup
+            (LookupRight)
+            (LookupSelection
+              (GraphPredicate
+                (Ident))
+              (Keyword)
+              (Ident))))))
+    (Keyword)
+    (Ident)
+    (FetchClause
+      (Keyword)
+      (FunctionCall
+        (FunctionName)
+        (ArgumentList
+          (String)))
+      (Idiom
+        (Ident)
+        (Ident)))))
+
+===================================================
+define :: Define user with a parameterized duration
+===================================================
+
+DEFINE USER $name ON DATABASE ROLES OWNER DURATION FOR TOKEN $token_duration FOR SESSION $session_duration COMMENT $comment
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (VariableName)
+    (OnRootNsDbClause
+      (Keyword)
+      (Keyword))
+    (RolesClause
+      (Keyword)
+      (Ident))
+    (DurationClause
+      (Keyword)
+      (DurationValue
+        (Keyword)
+        (Keyword)
+        (VariableName))
+      (DurationValue
+        (Keyword)
+        (Keyword)
+        (VariableName)))
+    (CommentClause
+      (Keyword)
+      (VariableName))))
+
+===================================================
+define :: Define api with permissions and no handler
+====================================================
+
+DEFINE API $path FOR any PERMISSIONS WHERE role = $user_role COMMENT $comment
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (VariableName)
+    (Keyword)
+    (Keyword)
+    (ApiOptions
+      (PermissionsBasicClause
+        (Keyword)
+        (WhereClause
+          (Keyword)
+          (BinaryExpression
+            (Ident)
+            (Operator)
+            (VariableName)))))
+    (CommentClause
+      (Keyword)
+      (VariableName))))
+
+=======================================
+define :: Analyzer filter naming a file
+=======================================
+
+DEFINE ANALYZER englishLemmatizer TOKENIZERS blank, class FILTERS mapper('../tests/data/lemmatization-en.txt')
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (TokenizersClause
+      (Keyword)
+      (AnalyzerTokenizer)
+      (AnalyzerTokenizer))
+    (FiltersClause
+      (Keyword)
+      (AnalyzerFilters
+        (Filter)
+        (String)))))
+
+=============================================
+define :: Reference on delete then a subquery
+=============================================
+
+DEFINE FIELD OVERWRITE tags ON post TYPE array<record<tag>> REFERENCE ON DELETE THEN (UPDATE ONLY $this SET tags -= $reference)
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (OverwriteClause
+      (Keyword))
+    (Idiom
+      (Ident))
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (TypeClause
+      (Keyword)
+      (ParameterizedType
+        (TypeName)
+        (ParameterizedType
+          (TypeName)
+          (TypeName))))
+    (ReferenceClause
+      (Keyword)
+      (Keyword)
+      (Keyword)
+      (Keyword)
+      (SubQuery
+        (UpdateStatement
+          (Keyword)
+          (Keyword)
+          (VariableName)
+          (SetClause
+            (Keyword)
+            (FieldAssignment
+              (Ident)
+              (Operator)
+              (VariableName))))))))
+
+===================================
+alter :: Alter event dropping async
+===================================
+
+ALTER EVENT my_event ON test WHEN $event = "CREATE" THEN { RETURN "restored"; } DROP COMMENT DROP ASYNC
+
+---
+
+(SurrealQL
+  (AlterStatement
+    (Keyword)
+    (Keyword)
+    (Ident)
+    (OnTableClause
+      (Keyword)
+      (Ident))
+    (WhenClause
+      (Keyword)
+      (BinaryExpression
+        (VariableName)
+        (Operator)
+        (String)))
+    (ThenClause
+      (Keyword)
+      (Block
+        (BraceOpen)
+        (ReturnStatement
+          (Keyword)
+          (String))
+        (BraceClose)))
+    (Keyword)
+    (Keyword)
+    (Keyword)
+    (Keyword)))
+
+
+==============================================
+values :: A trailing comma in an argument list
+==============================================
+
+RETURN string::concat(NONE, NULL, true, 1, 1d, [], {}, (1,2), a:b, /a/, 1..2, |$a| {}, )
+
+---
+
+(SurrealQL
+  (ReturnStatement
+    (Keyword)
+    (FunctionCall
+      (FunctionName)
+      (ArgumentList
+        (None)
+        (None)
+        (Bool)
+        (Number
+          (Int))
+        (Duration
+          (DurationPart))
+        (Array)
+        (Object
+          (BraceOpen)
+          (BraceClose))
+        (Point
+          (Number
+            (Int))
+          (Number
+            (Int)))
+        (RecordId
+          (RecordTbIdent)
+          (Colon)
+          (RecordIdIdent))
+        (Regex)
+        (Range
+          (Number
+            (Int))
+          (RangeOp)
+          (Number
+            (Int)))
+        (Closure
+          (Pipe)
+          (ParamDefinition
+            (VariableName))
+          (Pipe)
+          (Object
+            (BraceOpen)
+            (BraceClose)))))))
+
+==============================================
+values :: An escaped backtick in an identifier
+==============================================
+
+DEFINE TABLE `\``
+
+---
+
+(SurrealQL
+  (DefineStatement
+    (Keyword)
+    (Keyword)
+    (Ident)))
+
